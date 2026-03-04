@@ -1,302 +1,395 @@
 <!doctype html>
 <html lang="de">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HTML Log → Excel</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HTML Log → Excel (Gelb→Achsen)</title>
 
-<style>
-body{
-font-family:system-ui,Segoe UI,Roboto,sans-serif;
-padding:24px;
-max-width:1000px;
-margin:auto;
-}
-
-.card{
-border:1px solid #ddd;
-border-radius:12px;
-padding:16px;
-}
-
-button{
-padding:10px 14px;
-border-radius:10px;
-border:1px solid #ccc;
-background:white;
-cursor:pointer;
-}
-
-button:disabled{
-opacity:.5;
-cursor:not-allowed;
-}
-
-pre{
-background:#f7f7f7;
-padding:12px;
-border-radius:10px;
-overflow:auto;
-max-height:300px;
-}
-
-.row{
-display:flex;
-gap:12px;
-align-items:center;
-flex-wrap:wrap;
-}
-</style>
+  <style>
+    body{
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      padding:24px;
+      max-width: 1100px;
+      margin:auto;
+    }
+    .card{
+      border:1px solid #ddd;
+      border-radius:14px;
+      padding:16px;
+    }
+    .row{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    button{
+      padding:10px 14px;
+      border-radius:12px;
+      border:1px solid #ccc;
+      background:#fff;
+      cursor:pointer;
+    }
+    button:disabled{ opacity:.55; cursor:not-allowed; }
+    pre{
+      background:#f7f7f7;
+      padding:12px;
+      border-radius:12px;
+      overflow:auto;
+      max-height:320px;
+      white-space:pre-wrap;
+    }
+    .muted{ color:#666; font-size:14px; }
+    label{ display:flex; align-items:center; gap:8px; }
+    select{
+      padding:8px 10px;
+      border-radius:12px;
+      border:1px solid #ccc;
+      background:#fff;
+    }
+    code{ background:#f2f2f2; padding:2px 6px; border-radius:8px; }
+  </style>
 </head>
 
 <body>
-
-<h1>HTML Log → Excel</h1>
-
-<div class="card">
-
-<div class="row">
-<input id="files" type="file" multiple accept=".html,.htm">
-<button id="build" disabled>Excel erzeugen</button>
-<span id="status"></span>
-</div>
-
-<label style="margin-top:10px;display:block;">
-<input id="addFilename" type="checkbox" checked>
-Dateiname als Spalte hinzufügen
-</label>
-
-<h3>Log</h3>
-<pre id="log"></pre>
-
-</div>
-
-
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-<script>
-
-const fileInput=document.getElementById("files")
-const buildBtn=document.getElementById("build")
-const logEl=document.getElementById("log")
-const statusEl=document.getElementById("status")
-const addFilenameEl=document.getElementById("addFilename")
-
-let selectedFiles=[]
-
-
-fileInput.addEventListener("change",()=>{
-
-selectedFiles=Array.from(fileInput.files||[])
-buildBtn.disabled=!selectedFiles.length
-
-logEl.textContent=selectedFiles.map(f=>"• "+f.name).join("\n")
-
-})
-
-
-/* ------------------------------------------------
-   Encoding korrekt erkennen (UTF8 → Windows1252)
------------------------------------------------- */
-
-function readFileSmart(file){
-
-return new Promise((resolve,reject)=>{
-
-const reader=new FileReader()
-
-reader.onload=()=>{
-
-const buffer=reader.result
-
-const utf8=new TextDecoder("utf-8").decode(buffer)
-
-if(utf8.includes("Ã")||utf8.includes("�")){
-
-const win=new TextDecoder("windows-1252").decode(buffer)
-
-resolve(win)
-
-}else{
-
-resolve(utf8)
-
-}
-
-}
-
-reader.onerror=()=>reject(reader.error)
-
-reader.readAsArrayBuffer(file)
-
-})
-
-}
-
-
-/* ------------------------------------------------
-   HTML → Text
------------------------------------------------- */
-
-function normalizeText(doc){
-
-let text=doc.body?doc.body.innerText:""
-
-text=text.replace(/\r/g,"\n")
-
-text=text.replace(/[ \t]+/g," ")
-
-return text.trim()
-
-}
-
-
-/* ------------------------------------------------
-   Log Parser
------------------------------------------------- */
-
-function parseLog(text){
-
-const ts=`(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})`
-
-const regex=new RegExp(
-ts+"\\s+([\\s\\S]*?)(?=\\s*"+ts+"|\\s*$)",
-"g"
-)
-
-const rows=[]
-let m
-
-while((m=regex.exec(text))!==null){
-
-let datum=m[1]
-let zeit=m[2]
-let ereignis=m[3]||""
-
-ereignis=ereignis
-.replace(/\s*\n\s*/g," ")
-.replace(/\s{2,}/g," ")
-.trim()
-
-if(!ereignis) continue
-
-rows.push({
-Datum:datum,
-Zeit:zeit,
-Ereignis:ereignis
-})
-
-}
-
-return rows
-
-}
-
-
-/* ------------------------------------------------
-   HTML Datei verarbeiten
------------------------------------------------- */
-
-function extractRows(html,filename){
-
-const doc=new DOMParser().parseFromString(html,"text/html")
-
-const text=normalizeText(doc)
-
-let rows=parseLog(text)
-
-if(addFilenameEl.checked){
-rows=rows.map(r=>({Datei:filename,...r}))
-}
-
-return rows
-
-}
-
-
-/* ------------------------------------------------
-   Excel erzeugen
------------------------------------------------- */
-
-buildBtn.addEventListener("click",async()=>{
-
-buildBtn.disabled=true
-statusEl.textContent="Verarbeite..."
-
-logEl.textContent=""
-
-try{
-
-const allRows=[]
-let total=0
-
-for(const file of selectedFiles){
-
-const html=await readFileSmart(file)
-
-const rows=extractRows(html,file.name)
-
-allRows.push(...rows)
-
-total+=rows.length
-
-logEl.textContent+="OK: "+file.name+" → "+rows.length+" Zeilen\n"
-
-}
-
-if(!allRows.length){
-
-statusEl.textContent="Keine Logzeilen gefunden"
-buildBtn.disabled=false
-return
-
-}
-
-
-/* Sortieren */
-
-allRows.sort((a,b)=>{
-
-const da=(a.Datum||"")+" "+(a.Zeit||"")
-const db=(b.Datum||"")+" "+(b.Zeit||"")
-
-return da.localeCompare(db)
-
-})
-
-
-/* Excel */
-
-const ws=XLSX.utils.json_to_sheet(allRows)
-
-ws["!cols"]=[
-{wch:25},
-{wch:12},
-{wch:14},
-{wch:120}
-]
-
-const wb=XLSX.utils.book_new()
-
-XLSX.utils.book_append_sheet(wb,ws,"Daten")
-
-XLSX.writeFile(wb,"log_export.xlsx")
-
-statusEl.textContent="Fertig ("+total+" Zeilen)"
-
-}catch(err){
-
-console.error(err)
-
-statusEl.textContent="Fehler"
-
-}
-
-buildBtn.disabled=false
-
-})
-
-</script>
-
+  <h1>HTML Log → Excel</h1>
+  <p class="muted">
+    Extrahiert Zeilen im Format <code>DD.Mon.YY HH:MM:SS.mmm …</code> und berechnet zusätzlich die Zeit von
+    <code>Lichtgruppe 1: Gelb anschalten</code> bis zur ersten passenden
+    <code>ECAC: (TVD:xxx) Achsen im Abschnitt: n</code> Zeile.
+  </p>
+
+  <div class="card">
+    <div class="row">
+      <input id="files" type="file" multiple accept=".html,.htm,text/html">
+      <button id="build" disabled>Excel erzeugen</button>
+      <span id="status" style="font-weight:600;"></span>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
+      <label class="muted">
+        <input id="addFilename" type="checkbox" checked>
+        Spalte „Datei“ hinzufügen
+      </label>
+
+      <label class="muted">
+        TVD-Kontakt:
+        <select id="tvdSelect" disabled></select>
+      </label>
+    </div>
+
+    <p class="muted" style="margin-top:10px;">
+      Alles läuft lokal im Browser (keine Uploads).
+    </p>
+
+    <h3 style="margin:14px 0 8px;">Log</h3>
+    <pre id="log"></pre>
+  </div>
+
+  <!-- SheetJS -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <script>
+    const fileInput = document.getElementById("files");
+    const buildBtn = document.getElementById("build");
+    const statusEl = document.getElementById("status");
+    const logEl = document.getElementById("log");
+    const addFilenameEl = document.getElementById("addFilename");
+    const tvdSelectEl = document.getElementById("tvdSelect");
+
+    let selectedFiles = [];
+    const fileCache = new Map(); // name -> htmlText (decoded)
+
+    // -----------------------------
+    // 1) Encoding: UTF-8 -> Win1252 fallback
+    // -----------------------------
+    function readFileSmart(file){
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const buffer = reader.result;
+
+          const utf8 = new TextDecoder("utf-8").decode(buffer);
+          // Heuristik: wenn Mojibake/Replacement-Chars -> windows-1252
+          if (utf8.includes("Ã") || utf8.includes("�")) {
+            const win = new TextDecoder("windows-1252").decode(buffer);
+            resolve(win);
+          } else {
+            resolve(utf8);
+          }
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    // -----------------------------
+    // 2) HTML -> Text normalisieren
+    // -----------------------------
+    function normalizeText(doc){
+      let text = doc.body ? doc.body.innerText : "";
+      text = text.replace(/\r/g, "\n");
+      text = text.replace(/[ \t]+/g, " ");
+      return text.trim();
+    }
+
+    // -----------------------------
+    // 3) Logzeilen extrahieren
+    // -----------------------------
+    function parseLog(text){
+      const ts = `(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})`;
+
+      const regex = new RegExp(
+        ts + "\\s+([\\s\\S]*?)(?=\\s*" + ts + "|\\s*$)",
+        "g"
+      );
+
+      const rows = [];
+      let m;
+
+      while ((m = regex.exec(text)) !== null) {
+        const datum = m[1];
+        const zeit = m[2];
+        let ereignis = (m[3] || "")
+          .replace(/\s*\n\s*/g, " ")
+          .replace(/\s{2,}/g, " ")
+          .trim();
+
+        if (!ereignis) continue;
+
+        rows.push({ Datum: datum, Zeit: zeit, Ereignis: ereignis });
+      }
+
+      return rows;
+    }
+
+    function extractRowsFromHtml(htmlText, filename, includeFilename){
+      const doc = new DOMParser().parseFromString(htmlText, "text/html");
+      const text = normalizeText(doc);
+      const rows = parseLog(text);
+
+      if (includeFilename) return rows.map(r => ({ Datei: filename, ...r }));
+      return rows;
+    }
+
+    // -----------------------------
+    // 4) Datum+Zeit -> Millisekunden (für Differenzen)
+    // -----------------------------
+    const MONTH = {
+      Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5,
+      Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11
+    };
+
+    function toMs(datum, zeit){
+      // datum: 04.Mar.26
+      // zeit:  06:47:33.311
+      const dm = /^(\d{2})\.([A-Za-z]{3})\.(\d{2})$/.exec(datum);
+      const tm = /^(\d{2}):(\d{2}):(\d{2})\.(\d{3})$/.exec(zeit);
+      if (!dm || !tm) return NaN;
+
+      const day = Number(dm[1]);
+      const mon = MONTH[dm[2]] ?? NaN;
+      const yy  = Number(dm[3]);
+      const year = 2000 + yy;
+
+      const hh = Number(tm[1]);
+      const mm = Number(tm[2]);
+      const ss = Number(tm[3]);
+      const ms = Number(tm[4]);
+
+      // UTC reicht (Differenzen bleiben korrekt)
+      return Date.UTC(year, mon, day, hh, mm, ss, ms);
+    }
+
+    // -----------------------------
+    // 5) TVD-Kontakte aus Ereignissen finden
+    // -----------------------------
+    function findTvdContacts(rows){
+      const set = new Set();
+      const re = /ECAC:\s*\(TVD:(\d+)\)\s*Achsen im Abschnitt:\s*\d+/;
+      for (const r of rows) {
+        const m = re.exec(r.Ereignis || "");
+        if (m) set.add(m[1]);
+      }
+      return Array.from(set).sort((a,b)=>Number(a)-Number(b));
+    }
+
+    function setTvdDropdown(options){
+      tvdSelectEl.innerHTML = "";
+      if (!options.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "(kein TVD gefunden)";
+        tvdSelectEl.appendChild(opt);
+        tvdSelectEl.disabled = true;
+        return;
+      }
+
+      for (const v of options) {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = `TVD:${v}`;
+        tvdSelectEl.appendChild(opt);
+      }
+      tvdSelectEl.disabled = false;
+    }
+
+    // -----------------------------
+    // 6) Zeit von Gelb -> Achsen (für ausgewählten TVD)
+    // -----------------------------
+    function addGelbToAchsenSeconds(rows, selectedTvd){
+      const startNeedle = "Lichtgruppe 1: Gelb anschalten";
+      const achsenRe = new RegExp(
+        String.raw`^ECAC:\s*\(TVD:${selectedTvd}\)\s*Achsen im Abschnitt:\s*\d+`
+      );
+
+      let gelbStartMs = null;
+
+      for (const r of rows) {
+        r["Sekunden (Gelb→Achsen)"] = ""; // default leer
+
+        const ms = toMs(r.Datum, r.Zeit);
+        if (!Number.isFinite(ms)) continue;
+
+        if ((r.Ereignis || "").includes(startNeedle)) {
+          // Start des Zyklus (wir nehmen immer das erste Gelb bis zur nächsten Achsen-Meldung)
+          gelbStartMs = ms;
+          continue;
+        }
+
+        if (gelbStartMs !== null && achsenRe.test(r.Ereignis || "")) {
+          const deltaSec = (ms - gelbStartMs) / 1000;
+          // auf 3 Nachkommastellen, damit es zur Log-Zeitauflösung passt
+          r["Sekunden (Gelb→Achsen)"] = Math.round(deltaSec * 1000) / 1000;
+          // Zyklus abgeschlossen -> reset
+          gelbStartMs = null;
+        }
+      }
+
+      return rows;
+    }
+
+    // -----------------------------
+    // UI: Dateien wählen -> sofort analysieren (Cache + TVD Dropdown)
+    // -----------------------------
+    fileInput.addEventListener("change", async () => {
+      selectedFiles = Array.from(fileInput.files || []);
+      fileCache.clear();
+      logEl.textContent = "";
+      statusEl.textContent = "";
+
+      if (!selectedFiles.length) {
+        buildBtn.disabled = true;
+        setTvdDropdown([]);
+        return;
+      }
+
+      buildBtn.disabled = true;
+      statusEl.textContent = `Lese/analysiere ${selectedFiles.length} Datei(en)…`;
+      logEl.textContent = selectedFiles.map(f => `- ${f.name} (${f.size} bytes)`).join("\n") + "\n\n";
+
+      try {
+        // Einmal einlesen + Kontakte erkennen
+        let unionRowsForContacts = [];
+
+        for (const f of selectedFiles) {
+          const htmlText = await readFileSmart(f);
+          fileCache.set(f.name, htmlText);
+
+          // Für Kontakt-Erkennung reicht extrahieren ohne Dateispalte (schneller/kleiner)
+          const rows = extractRowsFromHtml(htmlText, f.name, false);
+          unionRowsForContacts = unionRowsForContacts.concat(rows);
+
+          logEl.textContent += `OK gelesen: ${f.name} → ${rows.length} Logzeilen\n`;
+        }
+
+        // TVD Dropdown befüllen
+        const tvds = findTvdContacts(unionRowsForContacts);
+        setTvdDropdown(tvds);
+
+        statusEl.textContent = `Bereit. Gefundene TVDs: ${tvds.length ? tvds.map(t=>`TVD:${t}`).join(", ") : "keine"}`;
+        buildBtn.disabled = false;
+
+      } catch (e) {
+        console.error(e);
+        statusEl.textContent = "Fehler beim Einlesen (siehe Konsole).";
+        buildBtn.disabled = true;
+      }
+    });
+
+    // -----------------------------
+    // Excel erzeugen
+    // -----------------------------
+    buildBtn.addEventListener("click", async () => {
+      if (!selectedFiles.length) return;
+
+      buildBtn.disabled = true;
+      statusEl.textContent = "Verarbeite & exportiere…";
+      logEl.textContent = "";
+
+      const includeFilename = addFilenameEl.checked;
+      const selectedTvd = tvdSelectEl.disabled ? "" : tvdSelectEl.value;
+
+      try {
+        let allRows = [];
+        let total = 0;
+
+        for (const f of selectedFiles) {
+          const htmlText = fileCache.get(f.name) ?? await readFileSmart(f);
+          const rows = extractRowsFromHtml(htmlText, f.name, includeFilename);
+          allRows.push(...rows);
+          total += rows.length;
+
+          logEl.textContent += `OK: ${f.name} → ${rows.length} Zeile(n)\n`;
+        }
+
+        if (!allRows.length) {
+          statusEl.textContent = "Keine passenden Logzeilen gefunden.";
+          buildBtn.disabled = false;
+          return;
+        }
+
+        // Sortieren nach Zeit (als Text klappt i.d.R. nicht über Monatswechsel hinweg -> wir sortieren über ms)
+        allRows.sort((a,b) => (toMs(a.Datum,a.Zeit) - toMs(b.Datum,b.Zeit)));
+
+        // Sekunden-Spalte berechnen (nur wenn ein TVD auswählbar ist)
+        if (selectedTvd) {
+          addGelbToAchsenSeconds(allRows, selectedTvd);
+        } else {
+          // trotzdem Spalte anlegen, falls kein TVD erkannt wurde
+          for (const r of allRows) r["Sekunden (Gelb→Achsen)"] = "";
+        }
+
+        // Worksheet erzeugen
+        const ws = XLSX.utils.json_to_sheet(allRows);
+
+        // Spaltenbreiten
+        const cols = [];
+        if (includeFilename) cols.push({ wch: 28 });
+        cols.push({ wch: 12 });  // Datum
+        cols.push({ wch: 14 });  // Zeit
+        cols.push({ wch: 110 }); // Ereignis
+        cols.push({ wch: 22 });  // Sekunden
+        ws["!cols"] = cols;
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Daten");
+
+        const outName =
+          selectedFiles.length === 1
+            ? `${selectedFiles[0].name.replace(/\.(html|htm)$/i, '')}.xlsx`
+            : "auswertung.xlsx";
+
+        XLSX.writeFile(wb, outName);
+
+        statusEl.textContent = `Fertig: ${outName} (${total} Zeilen) — TVD:${selectedTvd || "—"}`;
+      } catch (e) {
+        console.error(e);
+        statusEl.textContent = "Fehler beim Export (siehe Konsole).";
+      } finally {
+        buildBtn.disabled = false;
+      }
+    });
+  </script>
 </body>
 </html>
