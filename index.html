@@ -3,48 +3,48 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HTML → Excel Log Parser</title>
+<title>HTML Log → Excel</title>
 
 <style>
 body{
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-  padding:24px;
-  max-width:1000px;
-  margin:auto;
+font-family:system-ui,Segoe UI,Roboto,sans-serif;
+padding:24px;
+max-width:1000px;
+margin:auto;
 }
 
 .card{
-  border:1px solid #ddd;
-  border-radius:14px;
-  padding:16px;
+border:1px solid #ddd;
+border-radius:12px;
+padding:16px;
 }
 
 button{
-  padding:10px 14px;
-  border-radius:10px;
-  border:1px solid #ccc;
-  background:#fff;
-  cursor:pointer;
+padding:10px 14px;
+border-radius:10px;
+border:1px solid #ccc;
+background:white;
+cursor:pointer;
 }
 
 button:disabled{
-  opacity:.5;
-  cursor:not-allowed;
+opacity:.5;
+cursor:not-allowed;
 }
 
 pre{
-  background:#f7f7f7;
-  padding:12px;
-  border-radius:10px;
-  overflow:auto;
-  max-height:300px;
+background:#f7f7f7;
+padding:12px;
+border-radius:10px;
+overflow:auto;
+max-height:300px;
 }
 
 .row{
-  display:flex;
-  gap:12px;
-  align-items:center;
-  flex-wrap:wrap;
+display:flex;
+gap:12px;
+align-items:center;
+flex-wrap:wrap;
 }
 </style>
 </head>
@@ -61,12 +61,10 @@ pre{
 <span id="status"></span>
 </div>
 
-<div style="margin-top:10px;">
-<label>
+<label style="margin-top:10px;display:block;">
 <input id="addFilename" type="checkbox" checked>
 Dateiname als Spalte hinzufügen
 </label>
-</div>
 
 <h3>Log</h3>
 <pre id="log"></pre>
@@ -88,16 +86,18 @@ let selectedFiles=[]
 
 
 fileInput.addEventListener("change",()=>{
+
 selectedFiles=Array.from(fileInput.files||[])
 buildBtn.disabled=!selectedFiles.length
 
-logEl.textContent=selectedFiles.map(f=>"- "+f.name).join("\n")
+logEl.textContent=selectedFiles.map(f=>"• "+f.name).join("\n")
+
 })
 
 
-/* -------------------------------------------------
-   Encoding detection (fix für Ü / ü / ä / ö)
--------------------------------------------------- */
+/* ------------------------------------------------
+   Encoding korrekt erkennen (UTF8 → Windows1252)
+------------------------------------------------ */
 
 function readFileSmart(file){
 
@@ -107,35 +107,20 @@ const reader=new FileReader()
 
 reader.onload=()=>{
 
-try{
-
 const buffer=reader.result
 
-const utf8=new TextDecoder("utf-8",{fatal:false}).decode(buffer)
+const utf8=new TextDecoder("utf-8").decode(buffer)
 
-const replacement=(utf8.match(/\uFFFD/g)||[]).length
-const mojibake=/Ã.|Â./.test(utf8)
+if(utf8.includes("Ã")||utf8.includes("�")){
 
-if(replacement>0||mojibake){
-
-const win=new TextDecoder("windows-1252",{fatal:false}).decode(buffer)
-
-const winRep=(win.match(/\uFFFD/g)||[]).length
-const winMoj=/Ã.|Â./.test(win)
-
-if(winRep<replacement&&!winMoj){
-resolve(win)
-return
-}
+const win=new TextDecoder("windows-1252").decode(buffer)
 
 resolve(win)
-return
-}
+
+}else{
 
 resolve(utf8)
 
-}catch(e){
-reject(e)
 }
 
 }
@@ -149,30 +134,26 @@ reader.readAsArrayBuffer(file)
 }
 
 
-/* -------------------------------------------------
-   HTML -> Text normalisieren
--------------------------------------------------- */
+/* ------------------------------------------------
+   HTML → Text
+------------------------------------------------ */
 
 function normalizeText(doc){
 
 let text=doc.body?doc.body.innerText:""
 
-text=text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g,"")
-
 text=text.replace(/\r/g,"\n")
 
 text=text.replace(/[ \t]+/g," ")
-
-text=text.replace(/\n{3,}/g,"\n\n")
 
 return text.trim()
 
 }
 
 
-/* -------------------------------------------------
-   Logzeilen extrahieren
--------------------------------------------------- */
+/* ------------------------------------------------
+   Log Parser
+------------------------------------------------ */
 
 function parseLog(text){
 
@@ -212,9 +193,9 @@ return rows
 }
 
 
-/* -------------------------------------------------
-   HTML verarbeiten
--------------------------------------------------- */
+/* ------------------------------------------------
+   HTML Datei verarbeiten
+------------------------------------------------ */
 
 function extractRows(html,filename){
 
@@ -233,9 +214,9 @@ return rows
 }
 
 
-/* -------------------------------------------------
+/* ------------------------------------------------
    Excel erzeugen
--------------------------------------------------- */
+------------------------------------------------ */
 
 buildBtn.addEventListener("click",async()=>{
 
@@ -259,14 +240,13 @@ allRows.push(...rows)
 
 total+=rows.length
 
-logEl.textContent+="OK: "+file.name+" -> "+rows.length+" Zeilen\n"
+logEl.textContent+="OK: "+file.name+" → "+rows.length+" Zeilen\n"
 
 }
 
 if(!allRows.length){
 
 statusEl.textContent="Keine Logzeilen gefunden"
-
 buildBtn.disabled=false
 return
 
@@ -300,9 +280,7 @@ const wb=XLSX.utils.book_new()
 
 XLSX.utils.book_append_sheet(wb,ws,"Daten")
 
-const filename="log_export.xlsx"
-
-XLSX.writeFile(wb,filename)
+XLSX.writeFile(wb,"log_export.xlsx")
 
 statusEl.textContent="Fertig ("+total+" Zeilen)"
 
