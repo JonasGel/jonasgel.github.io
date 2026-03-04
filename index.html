@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HTML → Excel</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 24px; max-width: 900px; margin: 0 auto; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; }
+    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    input { margin: 10px 0; }
+    pre { background: #f7f7f7; padding: 12px; border-radius: 10px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>HTML-Dateien → Excel</h1>
+
+  <div class="card">
+    <p>Wähle mehrere HTML-Dateien aus. Danach wird eine Excel-Datei erzeugt.</p>
+
+    <input id="files" type="file" multiple accept=".html,.htm,text/html" />
+
+    <div style="display:flex; gap:10px; align-items:center; margin-top:10px;">
+      <button id="build" disabled>Excel erzeugen</button>
+      <span id="status"></span>
+    </div>
+
+    <h3>Vorschau (Log)</h3>
+    <pre id="log"></pre>
+  </div>
+
+  <!-- SheetJS (xlsx) via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <script>
+    const fileInput = document.getElementById('files');
+    const buildBtn = document.getElementById('build');
+    const statusEl = document.getElementById('status');
+    const logEl = document.getElementById('log');
+
+    let selectedFiles = [];
+
+    fileInput.addEventListener('change', () => {
+      selectedFiles = Array.from(fileInput.files || []);
+      buildBtn.disabled = selectedFiles.length === 0;
+      statusEl.textContent = selectedFiles.length ? `${selectedFiles.length} Datei(en) ausgewählt` : '';
+      logEl.textContent = selectedFiles.map(f => `- ${f.name} (${f.size} bytes)`).join('\n');
+    });
+
+    function readFileAsText(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+        r.readAsText(file);
+      });
+    }
+
+    function extractDataFromHtml(htmlText, filename) {
+      const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+
+      const title = (doc.querySelector('title')?.textContent || '').trim();
+
+      // Beispiel: alle H1-Texte einsammeln
+      const h1s = Array.from(doc.querySelectorAll('h1'))
+        .map(h => (h.textContent || '').trim())
+        .filter(Boolean)
+        .join(' | ');
+
+      return {
+        Datei: filename,
+        Title: title,
+        H1: h1s
+      };
+    }
+
+    buildBtn.addEventListener('click', async () => {
+      buildBtn.disabled = true;
+      statusEl.textContent = 'Verarbeite...';
+      logEl.textContent = '';
+
+      try {
+        const rows = [];
+        for (const f of selectedFiles) {
+          const text = await readFileAsText(f);
+          const row = extractDataFromHtml(text, f.name);
+          rows.push(row);
+          logEl.textContent += `OK: ${f.name}\n`;
+        }
+
+        // Excel bauen
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Daten');
+
+        // Download auslösen
+        const outName = 'auswertung.xlsx';
+        XLSX.writeFile(wb, outName);
+
+        statusEl.textContent = `Fertig: ${outName}`;
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = 'Fehler beim Verarbeiten (siehe Konsole).';
+        logEl.textContent += `\nFEHLER: ${err?.message || err}`;
+      } finally {
+        buildBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
