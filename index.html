@@ -1,214 +1,324 @@
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HTML → Excel (Datum / Zeit / Ereignis)</title>
-  <style>
-    :root { color-scheme: light; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 24px; max-width: 980px; margin: 0 auto; }
-    h1 { margin: 0 0 8px; }
-    p { margin: 8px 0; line-height: 1.4; }
-    .card { border: 1px solid #ddd; border-radius: 14px; padding: 16px; }
-    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    button {
-      padding: 10px 14px; border-radius: 12px; border: 1px solid #ccc;
-      background: #fff; cursor: pointer;
-    }
-    button:disabled { opacity: .55; cursor: not-allowed; }
-    input[type="file"] { padding: 8px 0; }
-    .muted { color:#666; font-size: 14px; }
-    .status { font-weight: 600; }
-    pre { background: #f7f7f7; padding: 12px; border-radius: 12px; overflow: auto; max-height: 280px; }
-    .pill { display:inline-block; padding: 3px 10px; border: 1px solid #ddd; border-radius: 999px; font-size: 12px; color:#444; }
-    label { display:flex; align-items:center; gap:8px; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HTML → Excel Log Parser</title>
+
+<style>
+body{
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  padding:24px;
+  max-width:1000px;
+  margin:auto;
+}
+
+.card{
+  border:1px solid #ddd;
+  border-radius:14px;
+  padding:16px;
+}
+
+button{
+  padding:10px 14px;
+  border-radius:10px;
+  border:1px solid #ccc;
+  background:#fff;
+  cursor:pointer;
+}
+
+button:disabled{
+  opacity:.5;
+  cursor:not-allowed;
+}
+
+pre{
+  background:#f7f7f7;
+  padding:12px;
+  border-radius:10px;
+  overflow:auto;
+  max-height:300px;
+}
+
+.row{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+</style>
 </head>
+
 <body>
-  <h1>HTML-Dateien → Excel</h1>
-  <p class="muted">
-    Upload (mehrere) <span class="pill">.html</span> / <span class="pill">.htm</span> Dateien.
-    Die App extrahiert Logzeilen im Format <code>DD.Mon.YY HH:MM:SS.mmm …</code> und erzeugt eine Excel mit
-    <b>Datum</b>, <b>Zeit</b>, <b>Ereignis</b>.
-  </p>
 
-  <div class="card">
-    <div class="row">
-      <input id="files" type="file" multiple accept=".html,.htm,text/html" />
-      <button id="build" disabled>Excel erzeugen</button>
-      <span id="status" class="status"></span>
-    </div>
+<h1>HTML Log → Excel</h1>
 
-    <div class="row" style="margin-top:10px;">
-      <label class="muted">
-        <input id="addFilename" type="checkbox" checked />
-        Zusätzliche Spalte „Datei“ hinzufügen (praktisch bei mehreren Uploads)
-      </label>
-    </div>
+<div class="card">
 
-    <p class="muted" style="margin-top:12px;">
-      Hinweis: Alles läuft lokal im Browser. Die Dateien werden nicht hochgeladen.
-    </p>
+<div class="row">
+<input id="files" type="file" multiple accept=".html,.htm">
+<button id="build" disabled>Excel erzeugen</button>
+<span id="status"></span>
+</div>
 
-    <h3 style="margin:14px 0 8px;">Log</h3>
-    <pre id="log"></pre>
-  </div>
+<div style="margin-top:10px;">
+<label>
+<input id="addFilename" type="checkbox" checked>
+Dateiname als Spalte hinzufügen
+</label>
+</div>
 
-  <!-- SheetJS (xlsx) -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<h3>Log</h3>
+<pre id="log"></pre>
 
-  <script>
-    const fileInput = document.getElementById('files');
-    const buildBtn = document.getElementById('build');
-    const statusEl = document.getElementById('status');
-    const logEl = document.getElementById('log');
-    const addFilenameEl = document.getElementById('addFilename');
+</div>
 
-    let selectedFiles = [];
 
-    fileInput.addEventListener('change', () => {
-      selectedFiles = Array.from(fileInput.files || []);
-      buildBtn.disabled = selectedFiles.length === 0;
-      statusEl.textContent = selectedFiles.length ? `${selectedFiles.length} Datei(en) ausgewählt` : '';
-      logEl.textContent =
-        selectedFiles.length
-          ? selectedFiles.map(f => `- ${f.name} (${f.size} bytes)`).join('\n')
-          : '';
-    });
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-    function readFileAsText(file) {
-      return new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result);
-        r.onerror = () => reject(r.error);
-        r.readAsText(file);
-      });
-    }
+<script>
 
-    function normalizeTextForLog(doc) {
-      // innerText erzeugt i.d.R. sinnvolle Umbrüche aus Block-Elementen (<div> etc.)
-      let t = doc.body ? doc.body.innerText : "";
+const fileInput=document.getElementById("files")
+const buildBtn=document.getElementById("build")
+const logEl=document.getElementById("log")
+const statusEl=document.getElementById("status")
+const addFilenameEl=document.getElementById("addFilename")
 
-      // Steuerzeichen entfernen (kommen in manchen Logs/Exports vor)
-      t = t.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+let selectedFiles=[]
 
-      // Whitespace vereinheitlichen
-      t = t.replace(/\r/g, "\n");
-      t = t.replace(/[ \t]+/g, " ");
-      t = t.replace(/\n{3,}/g, "\n\n");
 
-      return t.trim();
-    }
+fileInput.addEventListener("change",()=>{
+selectedFiles=Array.from(fileInput.files||[])
+buildBtn.disabled=!selectedFiles.length
 
-    function parseLogLines(text) {
-      // Datum: 04.Mar.26
-      // Zeit:  06:47:33.311
-      const ts = String.raw`(\d{2}\.[A-Za-z]{3}\.\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})`;
+logEl.textContent=selectedFiles.map(f=>"- "+f.name).join("\n")
+})
 
-      // Nimmt alles nach Datum+Zeit bis zum nächsten Datum+Zeit als Ereignis
-      const re = new RegExp(
-        ts + String.raw`\s+([\s\S]*?)(?=\s*` + ts + String.raw`|\s*$)`,
-        "g"
-      );
 
-      const rows = [];
-      let m;
+/* -------------------------------------------------
+   Encoding detection (fix für Ü / ü / ä / ö)
+-------------------------------------------------- */
 
-      while ((m = re.exec(text)) !== null) {
-        const datum = m[1];
-        const zeit = m[2];
-        let ereignis = m[3] || "";
+function readFileSmart(file){
 
-        // Ereignis aufräumen: Umbrüche innerhalb eines Ereignisses -> Space
-        ereignis = ereignis
-          .replace(/\s*\n\s*/g, " ")
-          .replace(/\s{2,}/g, " ")
-          .trim();
+return new Promise((resolve,reject)=>{
 
-        if (!ereignis) continue;
+const reader=new FileReader()
 
-        rows.push({ Datum: datum, Zeit: zeit, Ereignis: ereignis });
-      }
+reader.onload=()=>{
 
-      return rows;
-    }
+try{
 
-    function extractRowsFromHtml(htmlText, filename, includeFilename) {
-      const doc = new DOMParser().parseFromString(htmlText, "text/html");
-      const text = normalizeTextForLog(doc);
+const buffer=reader.result
 
-      const rows = parseLogLines(text);
+const utf8=new TextDecoder("utf-8",{fatal:false}).decode(buffer)
 
-      if (includeFilename) {
-        return rows.map(r => ({ Datei: filename, ...r }));
-      }
-      return rows;
-    }
+const replacement=(utf8.match(/\uFFFD/g)||[]).length
+const mojibake=/Ã.|Â./.test(utf8)
 
-    buildBtn.addEventListener('click', async () => {
-      if (!selectedFiles.length) return;
+if(replacement>0||mojibake){
 
-      buildBtn.disabled = true;
-      statusEl.textContent = 'Verarbeite…';
-      logEl.textContent = '';
+const win=new TextDecoder("windows-1252",{fatal:false}).decode(buffer)
 
-      const includeFilename = addFilenameEl.checked;
+const winRep=(win.match(/\uFFFD/g)||[]).length
+const winMoj=/Ã.|Â./.test(win)
 
-      try {
-        const allRows = [];
-        let totalParsed = 0;
+if(winRep<replacement&&!winMoj){
+resolve(win)
+return
+}
 
-        for (const f of selectedFiles) {
-          const htmlText = await readFileAsText(f);
-          const rows = extractRowsFromHtml(htmlText, f.name, includeFilename);
-          allRows.push(...rows);
-          totalParsed += rows.length;
+resolve(win)
+return
+}
 
-          logEl.textContent += `OK: ${f.name} → ${rows.length} Zeile(n)\n`;
-        }
+resolve(utf8)
 
-        if (!allRows.length) {
-          statusEl.textContent = 'Keine passenden Logzeilen gefunden.';
-          logEl.textContent += '\nTipp: Erwartetes Format ist z. B. "04.Mar.26 06:47:33.311 …"';
-          return;
-        }
+}catch(e){
+reject(e)
+}
 
-        // Optional: sortieren (Datum/Zeit sind Text; bei gleichem Format klappt lexikografisch meist)
-        // Wenn du echte Datumswerte willst, sag Bescheid – dann konvertieren wir in Excel-DateTime.
-        allRows.sort((a, b) => {
-          const da = (a.Datum || "") + " " + (a.Zeit || "");
-          const db = (b.Datum || "") + " " + (b.Zeit || "");
-          return da.localeCompare(db);
-        });
+}
 
-        // Excel bauen
-        const ws = XLSX.utils.json_to_sheet(allRows);
+reader.onerror=()=>reject(reader.error)
 
-        // Spaltenbreiten grob setzen
-        const cols = [];
-        if (includeFilename) cols.push({ wch: 28 });
-        cols.push({ wch: 12 }, { wch: 14 }, { wch: 120 });
-        ws['!cols'] = cols;
+reader.readAsArrayBuffer(file)
 
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Daten');
+})
 
-        const outName =
-          selectedFiles.length === 1
-            ? `${selectedFiles[0].name.replace(/\.(html|htm)$/i, '')}.xlsx`
-            : 'auswertung.xlsx';
+}
 
-        XLSX.writeFile(wb, outName);
 
-        statusEl.textContent = `Fertig: ${outName} (${totalParsed} Zeile(n))`;
-      } catch (err) {
-        console.error(err);
-        statusEl.textContent = 'Fehler beim Verarbeiten (siehe Konsole).';
-        logEl.textContent += `\nFEHLER: ${err?.message || err}`;
-      } finally {
-        buildBtn.disabled = false;
-      }
-    });
-  </script>
+/* -------------------------------------------------
+   HTML -> Text normalisieren
+-------------------------------------------------- */
+
+function normalizeText(doc){
+
+let text=doc.body?doc.body.innerText:""
+
+text=text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g,"")
+
+text=text.replace(/\r/g,"\n")
+
+text=text.replace(/[ \t]+/g," ")
+
+text=text.replace(/\n{3,}/g,"\n\n")
+
+return text.trim()
+
+}
+
+
+/* -------------------------------------------------
+   Logzeilen extrahieren
+-------------------------------------------------- */
+
+function parseLog(text){
+
+const ts=`(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})`
+
+const regex=new RegExp(
+ts+"\\s+([\\s\\S]*?)(?=\\s*"+ts+"|\\s*$)",
+"g"
+)
+
+const rows=[]
+let m
+
+while((m=regex.exec(text))!==null){
+
+let datum=m[1]
+let zeit=m[2]
+let ereignis=m[3]||""
+
+ereignis=ereignis
+.replace(/\s*\n\s*/g," ")
+.replace(/\s{2,}/g," ")
+.trim()
+
+if(!ereignis) continue
+
+rows.push({
+Datum:datum,
+Zeit:zeit,
+Ereignis:ereignis
+})
+
+}
+
+return rows
+
+}
+
+
+/* -------------------------------------------------
+   HTML verarbeiten
+-------------------------------------------------- */
+
+function extractRows(html,filename){
+
+const doc=new DOMParser().parseFromString(html,"text/html")
+
+const text=normalizeText(doc)
+
+let rows=parseLog(text)
+
+if(addFilenameEl.checked){
+rows=rows.map(r=>({Datei:filename,...r}))
+}
+
+return rows
+
+}
+
+
+/* -------------------------------------------------
+   Excel erzeugen
+-------------------------------------------------- */
+
+buildBtn.addEventListener("click",async()=>{
+
+buildBtn.disabled=true
+statusEl.textContent="Verarbeite..."
+
+logEl.textContent=""
+
+try{
+
+const allRows=[]
+let total=0
+
+for(const file of selectedFiles){
+
+const html=await readFileSmart(file)
+
+const rows=extractRows(html,file.name)
+
+allRows.push(...rows)
+
+total+=rows.length
+
+logEl.textContent+="OK: "+file.name+" -> "+rows.length+" Zeilen\n"
+
+}
+
+if(!allRows.length){
+
+statusEl.textContent="Keine Logzeilen gefunden"
+
+buildBtn.disabled=false
+return
+
+}
+
+
+/* Sortieren */
+
+allRows.sort((a,b)=>{
+
+const da=(a.Datum||"")+" "+(a.Zeit||"")
+const db=(b.Datum||"")+" "+(b.Zeit||"")
+
+return da.localeCompare(db)
+
+})
+
+
+/* Excel */
+
+const ws=XLSX.utils.json_to_sheet(allRows)
+
+ws["!cols"]=[
+{wch:25},
+{wch:12},
+{wch:14},
+{wch:120}
+]
+
+const wb=XLSX.utils.book_new()
+
+XLSX.utils.book_append_sheet(wb,ws,"Daten")
+
+const filename="log_export.xlsx"
+
+XLSX.writeFile(wb,filename)
+
+statusEl.textContent="Fertig ("+total+" Zeilen)"
+
+}catch(err){
+
+console.error(err)
+
+statusEl.textContent="Fehler"
+
+}
+
+buildBtn.disabled=false
+
+})
+
+</script>
+
 </body>
 </html>
