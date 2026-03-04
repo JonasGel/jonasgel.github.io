@@ -3,31 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HTML Log → Excel Analyse</title>
+
+<title>SIMIS Analyse</title>
 
 <style>
+
 body{
 font-family:system-ui,Segoe UI,Roboto,sans-serif;
-padding:24px;
-max-width:1100px;
+max-width:900px;
 margin:auto;
+padding:30px;
+}
+
+h1{
+margin-bottom:10px;
 }
 
 .card{
 border:1px solid #ddd;
-border-radius:14px;
-padding:16px;
+border-radius:12px;
+padding:20px;
 }
 
 .row{
 display:flex;
-gap:12px;
-align-items:center;
+gap:10px;
 flex-wrap:wrap;
+align-items:center;
+margin-top:12px;
 }
 
 button{
-padding:10px 14px;
+padding:10px 16px;
 border-radius:10px;
 border:1px solid #ccc;
 background:white;
@@ -39,51 +46,63 @@ opacity:.5;
 cursor:not-allowed;
 }
 
-select{
-padding:8px 10px;
-border-radius:10px;
-border:1px solid #ccc;
+select,input[type=file]{
+padding:6px 8px;
 }
 
 pre{
 background:#f7f7f7;
 padding:12px;
-border-radius:10px;
+border-radius:8px;
+max-height:250px;
 overflow:auto;
-max-height:320px;
 }
 
-.muted{color:#666;font-size:14px;}
+.footer{
+margin-top:30px;
+font-size:13px;
+color:#777;
+text-align:center;
+}
+
 </style>
 </head>
 
+
 <body>
 
-<h1>Bahnübergang Log → Excel Analyse</h1>
+<h1>SIMIS Analyse</h1>
+
+<p>Bitte alle für die Auswertung relevanten Dimotools Protokolle auswählen.</p>
 
 <div class="card">
 
-<div class="row">
 <input id="files" type="file" multiple accept=".html,.htm">
-<button id="build" disabled>Excel erzeugen</button>
-<span id="status"></span>
+
+<div class="row">
+<label>Erkannte Kontakte:</label>
+<select id="tvdSelect" disabled></select>
 </div>
 
-<div class="row" style="margin-top:10px;">
+<div class="row">
 <label>
-<input id="addFilename" type="checkbox" checked>
+<input type="checkbox" id="addFilename" checked>
 Dateiname-Spalte hinzufügen
 </label>
+</div>
 
-<label>
-TVD Kontakt:
-<select id="tvdSelect" disabled></select>
-</label>
+<div class="row">
+<button id="build" disabled>Auswertung erzeugen</button>
+<span id="status"></span>
 </div>
 
 <h3>Log</h3>
 <pre id="log"></pre>
 
+</div>
+
+<div class="footer">
+Copyright Jonas Gelhaus 2026
 </div>
 
 
@@ -93,18 +112,18 @@ TVD Kontakt:
 
 const fileInput=document.getElementById("files")
 const buildBtn=document.getElementById("build")
+const tvdSelect=document.getElementById("tvdSelect")
 const logEl=document.getElementById("log")
 const statusEl=document.getElementById("status")
-const tvdSelect=document.getElementById("tvdSelect")
 const addFilename=document.getElementById("addFilename")
 
 let selectedFiles=[]
 const fileCache=new Map()
 
+let anlagenName="SIMIS"
 
-/* ---------------------------
-Encoding fix
---------------------------- */
+
+/* Encoding */
 
 function readFileSmart(file){
 
@@ -135,57 +154,27 @@ r.readAsArrayBuffer(file)
 }
 
 
-/* ---------------------------
-HTML -> Text
---------------------------- */
-
-function normalizeText(doc){
-
-let t=doc.body?doc.body.innerText:""
-
-t=t.replace(/\r/g,"\n")
-t=t.replace(/[ \t]+/g," ")
-
-return t.trim()
-
-}
-
-
-/* ---------------------------
-Log Parser
---------------------------- */
-
-function parseLog(text){
-
-const ts=`(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})`
-
-const re=new RegExp(ts+"\\s+([\\s\\S]*?)(?=\\s*"+ts+"|\\s*$)","g")
-
-const rows=[]
-let m
-
-while((m=re.exec(text))!==null){
-
-let datum=m[1]
-let zeit=m[2]
-let ereignis=m[3]
-
-ereignis=ereignis.replace(/\s*\n\s*/g," ").trim()
-
-rows.push({Datum:datum,Zeit:zeit,Ereignis:ereignis})
-
-}
-
-return rows
-
-}
-
-
-/* ---------------------------
-Zeit -> ms
---------------------------- */
+/* Datum Format */
 
 const MONTH={
+Jan:"01",Feb:"02",Mar:"03",Apr:"04",May:"05",Jun:"06",
+Jul:"07",Aug:"08",Sep:"09",Oct:"10",Nov:"11",Dec:"12"
+}
+
+function formatDate(d){
+
+const m=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
+
+if(!m)return d
+
+return `${m[1]}.${MONTH[m[2]]}.20${m[3]}`
+
+}
+
+
+/* ms Zeit */
+
+const MONTHIDX={
 Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,
 Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11
 }
@@ -195,11 +184,9 @@ function toMs(d,z){
 const dm=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
 const tm=/(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(z)
 
-if(!dm||!tm)return NaN
-
 return Date.UTC(
 2000+Number(dm[3]),
-MONTH[dm[2]],
+MONTHIDX[dm[2]],
 Number(dm[1]),
 Number(tm[1]),
 Number(tm[2]),
@@ -210,9 +197,44 @@ Number(tm[4])
 }
 
 
-/* ---------------------------
-TVD finden
---------------------------- */
+/* Log Parser */
+
+function parseLog(text){
+
+if(text.includes("Anlage:")){
+
+const m=/Anlage:\s*(.+)/.exec(text)
+if(m)anlagenName=m[1].trim()
+
+}
+
+const ts=`(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})`
+
+const re=new RegExp(ts+"\\s+([\\s\\S]*?)(?=\\s*"+ts+"|\\s*$)","g")
+
+const rows=[]
+let m
+
+while((m=re.exec(text))!==null){
+
+let ereignis=m[3].replace(/\s*\n\s*/g," ").trim()
+
+if(ereignis.includes("SIEMENS AG - Transportation Systems")) continue
+
+rows.push({
+Datum:formatDate(m[1]),
+Zeit:m[2],
+Ereignis:ereignis
+})
+
+}
+
+return rows
+
+}
+
+
+/* Kontakte */
 
 function findTvd(rows){
 
@@ -228,9 +250,7 @@ return [...set].sort((a,b)=>a-b)
 }
 
 
-/* ---------------------------
-Zeitmessung
---------------------------- */
+/* Zeitmessung */
 
 function addSeconds(rows,tvd){
 
@@ -255,9 +275,7 @@ const m=re.exec(r.Ereignis)
 
 if(m){
 
-const diff=(ms-startTime)/1000
-
-r["Sekunden (Gelb→Achsen)"]=Number(diff.toFixed(3))
+r["Sekunden (Gelb→Achsen)"]=((ms-startTime)/1000).toFixed(3)
 
 startTime=null
 
@@ -270,9 +288,7 @@ startTime=null
 }
 
 
-/* ---------------------------
-Ergebnisliste
---------------------------- */
+/* Ergebnisse */
 
 function buildResults(rows,tvd){
 
@@ -280,16 +296,13 @@ const start="Lichtgruppe 1: Gelb anschalten"
 const re=new RegExp(`ECAC:\\s*\\(TVD:${tvd}\\)\\s*Achsen im Abschnitt:\\s*(\\d+)`)
 
 let startRow=null
-
-const results=[]
+const res=[]
 
 rows.forEach(r=>{
 
 const ms=toMs(r.Datum,r.Zeit)
 
-if(r.Ereignis.includes(start)){
-startRow=r
-}
+if(r.Ereignis.includes(start)) startRow=r
 
 if(startRow){
 
@@ -299,12 +312,12 @@ if(m){
 
 const diff=(ms-toMs(startRow.Datum,startRow.Zeit))/1000
 
-results.push({
+res.push({
 "Start Gelb":startRow.Datum+" "+startRow.Zeit,
 "Achsenzeit":r.Datum+" "+r.Zeit,
-"TVD":"TVD:"+tvd,
-"Achsenwert":Number(m[1]),
-"Dauer Sekunden":Number(diff.toFixed(3))
+"TVD":"TVD"+tvd,
+"Achsenwert":m[1],
+"Dauer Sekunden":diff.toFixed(3)
 })
 
 startRow=null
@@ -315,21 +328,16 @@ startRow=null
 
 })
 
-return results
+return res
 
 }
 
 
-/* ---------------------------
-Dateien laden
---------------------------- */
+/* Dateien laden */
 
 fileInput.addEventListener("change",async()=>{
 
 selectedFiles=[...fileInput.files]
-
-buildBtn.disabled=true
-fileCache.clear()
 
 let allRows=[]
 
@@ -339,9 +347,9 @@ const html=await readFileSmart(f)
 
 fileCache.set(f.name,html)
 
-const rows=parseLog(normalizeText(
-new DOMParser().parseFromString(html,"text/html")
-))
+const doc=new DOMParser().parseFromString(html,"text/html")
+
+const rows=parseLog(doc.body.innerText)
 
 allRows.push(...rows)
 
@@ -364,9 +372,7 @@ buildBtn.disabled=false
 })
 
 
-/* ---------------------------
-Excel Export
---------------------------- */
+/* Excel */
 
 buildBtn.addEventListener("click",async()=>{
 
@@ -376,13 +382,11 @@ for(const f of selectedFiles){
 
 const html=fileCache.get(f.name)
 
-const r=parseLog(normalizeText(
-new DOMParser().parseFromString(html,"text/html")
-))
+const doc=new DOMParser().parseFromString(html,"text/html")
 
-if(addFilename.checked){
-r.forEach(x=>x.Datei=f.name)
-}
+const r=parseLog(doc.body.innerText)
+
+if(addFilename.checked) r.forEach(x=>x.Datei=f.name)
 
 rows.push(...r)
 
@@ -396,28 +400,6 @@ addSeconds(rows,tvd)
 
 const results=buildResults(rows,tvd)
 
-/* Statistik */
-
-if(results.length){
-
-const d=results.map(r=>r["Dauer Sekunden"])
-
-const avg=d.reduce((a,b)=>a+b)/d.length
-const min=Math.min(...d)
-const max=Math.max(...d)
-
-results.push({})
-results.push({ "Start Gelb":"Statistik"})
-results.push({ "Start Gelb":"Anzahl","Achsenzeit":d.length})
-results.push({ "Start Gelb":"Mittelwert","Achsenzeit":avg})
-results.push({ "Start Gelb":"Minimum","Achsenzeit":min})
-results.push({ "Start Gelb":"Maximum","Achsenzeit":max})
-
-}
-
-
-/* Excel */
-
 const ws1=XLSX.utils.json_to_sheet(rows)
 const ws2=XLSX.utils.json_to_sheet(results)
 
@@ -426,9 +408,15 @@ const wb=XLSX.utils.book_new()
 XLSX.utils.book_append_sheet(wb,ws1,"Daten")
 XLSX.utils.book_append_sheet(wb,ws2,"Ergebnisse")
 
-XLSX.writeFile(wb,"bahnuebergang_auswertung.xlsx")
+const today=new Date()
 
-statusEl.textContent="Fertig"
+const dateStr=today.toISOString().slice(0,10).replace(/-/g,"")
+
+const filename=`${anlagenName}_${dateStr}_TVD${tvd}.xlsx`
+
+XLSX.writeFile(wb,filename)
+
+statusEl.textContent="Auswertung erzeugt"
 
 })
 
