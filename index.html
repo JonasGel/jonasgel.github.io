@@ -6,408 +6,442 @@
 <title>SIMIS Analyse</title>
 
 <style>
-  body{
-    font-family:system-ui,Segoe UI,Roboto,sans-serif;
-    max-width:900px;
-    margin:auto;
-    padding:30px;
-  }
-  .card{
-    border:1px solid #ddd;
-    border-radius:12px;
-    padding:20px;
-  }
-  .row{
-    display:flex;
-    gap:12px;
-    flex-wrap:wrap;
-    align-items:center;
-    margin-top:12px;
-  }
-  button{
-    padding:10px 16px;
-    border-radius:10px;
-    border:1px solid #ccc;
-    background:white;
-    cursor:pointer;
-  }
-  button:disabled{
-    opacity:.5;
-    cursor:not-allowed;
-  }
-  select,input[type=file]{
-    padding:6px 8px;
-  }
-  pre{
-    background:#f7f7f7;
-    padding:12px;
-    border-radius:8px;
-    max-height:260px;
-    overflow:auto;
-    white-space:pre-wrap;
-  }
-  .footer{
-    margin-top:30px;
-    font-size:13px;
-    color:#777;
-    text-align:center;
-  }
+
+body{
+font-family:system-ui,Segoe UI,Roboto,sans-serif;
+max-width:900px;
+margin:auto;
+padding:30px;
+}
+
+.card{
+border:1px solid #ddd;
+border-radius:12px;
+padding:20px;
+}
+
+.row{
+display:flex;
+gap:12px;
+flex-wrap:wrap;
+align-items:center;
+margin-top:12px;
+}
+
+button{
+padding:10px 16px;
+border-radius:10px;
+border:1px solid #ccc;
+background:white;
+cursor:pointer;
+}
+
+button:disabled{
+opacity:.5;
+cursor:not-allowed;
+}
+
+pre{
+background:#f7f7f7;
+padding:12px;
+border-radius:8px;
+max-height:260px;
+overflow:auto;
+white-space:pre-wrap;
+}
+
+.footer{
+margin-top:30px;
+font-size:13px;
+color:#777;
+text-align:center;
+}
+
 </style>
 </head>
+
 
 <body>
 
 <h1>SIMIS Analyse</h1>
+
 <p>Bitte alle für die Auswertung relevanten Dimotools Protokolle auswählen.</p>
 
 <div class="card">
 
-  <div class="row">
-    <input id="files" type="file" multiple accept=".html,.htm">
-  </div>
+<div class="row">
+<input id="files" type="file" multiple accept=".html,.htm">
+</div>
 
-  <div class="row">
-    <label>Erkannte Kontakte:</label>
-    <select id="tvdSelect" disabled></select>
-  </div>
+<div class="row">
+<label>Erkannte Kontakte:</label>
+<select id="tvdSelect" disabled></select>
+</div>
 
-  <div class="row">
-    <label>
-      <input type="checkbox" id="addFilename" checked>
-      Dateiname-Spalte hinzufügen
-    </label>
-  </div>
+<div class="row">
+<label>
+<input type="checkbox" id="addFilename" checked>
+Dateiname-Spalte hinzufügen
+</label>
+</div>
 
-  <div class="row">
-    <button id="build" disabled>Auswertung erzeugen</button>
-    <span id="status"></span>
-  </div>
+<div class="row">
+<button id="build" disabled>Auswertung erzeugen</button>
+<span id="status"></span>
+</div>
 
-  <h3>Log</h3>
-  <pre id="log"></pre>
+<h3>Log</h3>
+<pre id="log"></pre>
 
 </div>
 
-<div class="footer">Copyright Jonas Gelhaus 2026</div>
+<div class="footer">
+Copyright Jonas Gelhaus 2026
+</div>
+
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script>
-  const fileInput = document.getElementById("files");
-  const buildBtn = document.getElementById("build");
-  const tvdSelect = document.getElementById("tvdSelect");
-  const logEl = document.getElementById("log");
-  const statusEl = document.getElementById("status");
-  const addFilename = document.getElementById("addFilename");
 
-  let selectedFiles = [];
-  const fileCache = new Map();
-  let anlagenName = "SIMIS";
+const fileInput=document.getElementById("files")
+const buildBtn=document.getElementById("build")
+const tvdSelect=document.getElementById("tvdSelect")
+const logEl=document.getElementById("log")
+const statusEl=document.getElementById("status")
+const addFilename=document.getElementById("addFilename")
 
-  // ---------- Encoding (UTF-8 -> windows-1252 fallback) ----------
-  function readFileSmart(file){
-    return new Promise((resolve,reject)=>{
-      const r = new FileReader();
-      r.onload = ()=>{
-        const buf = r.result;
-        const utf8 = new TextDecoder("utf-8").decode(buf);
-        if (utf8.includes("Ã") || utf8.includes("�")) {
-          resolve(new TextDecoder("windows-1252").decode(buf));
-        } else {
-          resolve(utf8);
-        }
-      };
-      r.onerror = ()=>reject(r.error);
-      r.readAsArrayBuffer(file);
-    });
-  }
+let selectedFiles=[]
+const fileCache=new Map()
 
-  // ---------- Zeitberechnung (aus Originalformat: 04.Mar.26) ----------
-  const MONTHIDX = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+let anlagenName="SIMIS"
 
-  function toMs(d,z){
-    const dm = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d);
-    const tm = /(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(z);
-    if(!dm || !tm) return NaN;
-    return Date.UTC(
-      2000 + Number(dm[3]),
-      MONTHIDX[dm[2]],
-      Number(dm[1]),
-      Number(tm[1]),
-      Number(tm[2]),
-      Number(tm[3]),
-      Number(tm[4])
-    );
-  }
 
-  // ---------- Datum formatieren für Excel (DD.MM.YYYY) ----------
-  const MONTH = {Jan:"01",Feb:"02",Mar:"03",Apr:"04",May:"05",Jun:"06",Jul:"07",Aug:"08",Sep:"09",Oct:"10",Nov:"11",Dec:"12"};
-  function formatDate(d){
-    const m = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d);
-    if(!m) return d;
-    return `${m[1]}.${MONTH[m[2]]}.20${m[3]}`;
-  }
+/* Encoding */
 
-  // ---------- Anlagenname säubern (HTML-Artefakte entfernen) ----------
-  function sanitizeAnlageName(raw){
-    let name = (raw || "").trim();
-    // Alles nach _BR_ abschneiden (typische Artefakte)
-    name = name.replace(/_BR_.*/i, "");
-    // HTML Tags raus (falls vorhanden)
-    name = name.replace(/<[^>]*>/g, "");
-    // Mehrfachspaces zu einem underscore
-    name = name.replace(/\s+/g, "_");
-    // Unerwünschte Zeichen raus (wir erlauben Buchstaben/Zahlen/_-.,)
-    name = name.replace(/[^\w\-,.]/g, "");
-    // Mehrere _ zusammenfassen
-    name = name.replace(/_+/g, "_");
-    // Leading/trailing _
-    name = name.replace(/^_+|_+$/g, "");
-    return name || "SIMIS";
-  }
+function readFileSmart(file){
 
-  // ---------- Parser ----------
-  function parseLog(text){
-    // Anlage: ... nur bis Zeilenende
-    const header = /Anlage:\s*([^\n\r]+)/.exec(text);
-    if (header) {
-      anlagenName = sanitizeAnlageName(header[1]);
-    }
+return new Promise((resolve,reject)=>{
 
-    const ts = `(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})`;
-    const re = new RegExp(ts + "\\s+([\\s\\S]*?)(?=\\s*" + ts + "|\\s*$)", "g");
+const r=new FileReader()
 
-    const rows = [];
-    let m;
+r.onload=()=>{
 
-    while ((m = re.exec(text)) !== null) {
-      let ereignis = (m[3] || "").replace(/\s*\n\s*/g," ").replace(/\s{2,}/g," ").trim();
+const buf=r.result
 
-      // Abschlusszeile ignorieren
-      if (ereignis.includes("SIEMENS AG - Transportation Systems")) continue;
-      if (!ereignis) continue;
+const utf8=new TextDecoder("utf-8").decode(buf)
 
-      rows.push({
-        Datum: m[1],  // Original
-        Zeit: m[2],
-        Ereignis: ereignis
-      });
-    }
+if(utf8.includes("Ã")||utf8.includes("�")){
+resolve(new TextDecoder("windows-1252").decode(buf))
+}else{
+resolve(utf8)
+}
 
-    return rows;
-  }
+}
 
-  // ---------- TVD Kontakte finden ----------
-  function findTvd(rows){
-    const set = new Set();
-    rows.forEach(r=>{
-      const m = /ECAC:\s*\(TVD:(\d+)\)/.exec(r.Ereignis);
-      if(m) set.add(m[1]);
-    });
-    return [...set].sort((a,b)=>Number(a)-Number(b));
-  }
+r.onerror=()=>reject(r.error)
 
-  // ---------- Sekunden-Spalte (auf Achsenzeile) ----------
-  function addSeconds(rows, tvd){
-    const startNeedle = "Lichtgruppe 1: Gelb anschalten";
-    const re = new RegExp(`ECAC:\\s*\\(TVD:${tvd}\\)\\s*Achsen im Abschnitt:\\s*(\\d+)`);
-    let startMs = null;
+r.readAsArrayBuffer(file)
 
-    rows.forEach(r=>{
-      r["Sekunden (Gelb→Achsen)"] = "";
-      const ms = toMs(r.Datum, r.Zeit);
-      if (!Number.isFinite(ms)) return;
+})
 
-      if ((r.Ereignis || "").includes(startNeedle)) {
-        startMs = ms;
-        return;
-      }
+}
 
-      if (startMs !== null) {
-        const m = re.exec(r.Ereignis || "");
-        if (m) {
-          r["Sekunden (Gelb→Achsen)"] = ((ms - startMs)/1000).toFixed(3);
-          startMs = null;
-        }
-      }
-    });
-  }
 
-  // ---------- Ergebnisblatt (Zyklus-Tabelle) ----------
-  function buildResults(rows, tvd){
-    const startNeedle = "Lichtgruppe 1: Gelb anschalten";
-    const re = new RegExp(`ECAC:\\s*\\(TVD:${tvd}\\)\\s*Achsen im Abschnitt:\\s*(\\d+)`);
+/* Zeitberechnung */
 
-    let startRow = null;
-    const res = [];
+const MONTHIDX={
+Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,
+Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11
+}
 
-    rows.forEach(r=>{
-      const ms = toMs(r.Datum, r.Zeit);
-      if (!Number.isFinite(ms)) return;
+function toMs(d,z){
 
-      if ((r.Ereignis || "").includes(startNeedle)) {
-        startRow = r;
-        return;
-      }
+const dm=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
+const tm=/(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(z)
 
-      if (startRow) {
-        const m = re.exec(r.Ereignis || "");
-        if (m) {
-          const diff = (ms - toMs(startRow.Datum, startRow.Zeit)) / 1000;
-          res.push({
-            "Start Gelb": `${formatDate(startRow.Datum)} ${startRow.Zeit}`,
-            "Achsenzeit": `${formatDate(r.Datum)} ${r.Zeit}`,
-            "TVD": `TVD${tvd}`,
-            "Achsenwert": Number(m[1]),
-            "Dauer Sekunden": Number(diff.toFixed(3))
-          });
-          startRow = null;
-        }
-      }
-    });
+if(!dm||!tm) return NaN
 
-    // Statistik anhängen
-    if (res.length) {
-      const durs = res.map(x => x["Dauer Sekunden"]);
-      const sum = durs.reduce((a,b)=>a+b,0);
-      const avg = sum / durs.length;
-      const min = Math.min(...durs);
-      const max = Math.max(...durs);
+return Date.UTC(
+2000+Number(dm[3]),
+MONTHIDX[dm[2]],
+Number(dm[1]),
+Number(tm[1]),
+Number(tm[2]),
+Number(tm[3]),
+Number(tm[4])
+)
 
-      res.push({});
-      res.push({ "Start Gelb": "Statistik" });
-      res.push({ "Start Gelb": "Anzahl", "Achsenzeit": durs.length });
-      res.push({ "Start Gelb": "Mittelwert", "Achsenzeit": Number(avg.toFixed(3)) });
-      res.push({ "Start Gelb": "Minimum", "Achsenzeit": Number(min.toFixed(3)) });
-      res.push({ "Start Gelb": "Maximum", "Achsenzeit": Number(max.toFixed(3)) });
-    }
+}
 
-    return res;
-  }
 
-  // ---------- UI: Dateien auswählen -> analysieren & Dropdown befüllen ----------
-  fileInput.addEventListener("change", async () => {
-    selectedFiles = [...fileInput.files];
-    fileCache.clear();
-    logEl.textContent = "";
-    statusEl.textContent = "";
-    buildBtn.disabled = true;
-    tvdSelect.innerHTML = "";
-    tvdSelect.disabled = true;
+/* Datum Format */
 
-    if (!selectedFiles.length) return;
+const MONTH={
+Jan:"01",Feb:"02",Mar:"03",Apr:"04",May:"05",Jun:"06",
+Jul:"07",Aug:"08",Sep:"09",Oct:"10",Nov:"11",Dec:"12"
+}
 
-    logEl.textContent = "Dateien werden analysiert...\n";
-    let allRows = [];
+function formatDate(d){
 
-    try {
-      for (const f of selectedFiles) {
-        const html = await readFileSmart(f);
-        fileCache.set(f.name, html);
-        const rows = parseLog(html);
-        allRows.push(...rows);
-        logEl.textContent += `✓ ${f.name}: ${rows.length} Zeilen\n`;
-      }
+const m=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
 
-      const tvds = findTvd(allRows);
+if(!m) return d
 
-      if (tvds.length) {
-        tvds.forEach(v=>{
-          const o=document.createElement("option");
-          o.value=v;
-          o.textContent=`TVD:${v}`;
-          tvdSelect.appendChild(o);
-        });
-        tvdSelect.disabled = false;
-        logEl.textContent += `\nKontakte erkannt: ${tvds.map(x=>"TVD:"+x).join(", ")}\n`;
-      } else {
-        const o=document.createElement("option");
-        o.value="";
-        o.textContent="(keine TVD gefunden)";
-        tvdSelect.appendChild(o);
-        tvdSelect.disabled=true;
-        logEl.textContent += "\nKeine TVD Kontakte gefunden.\n";
-      }
+return `${m[1]}.${MONTH[m[2]]}.20${m[3]}`
 
-      buildBtn.disabled = false;
-      statusEl.textContent = "Bereit.";
+}
 
-    } catch (e) {
-      console.error(e);
-      statusEl.textContent = "Fehler beim Einlesen (Konsole).";
-      logEl.textContent += `\nFehler: ${e?.message || e}\n`;
-      buildBtn.disabled = true;
-    }
-  });
 
-  // ---------- Export ----------
-  buildBtn.addEventListener("click", async () => {
-    if (!selectedFiles.length) return;
+/* Anlagenname säubern */
 
-    const tvd = tvdSelect.disabled ? "" : tvdSelect.value;
-    if (!tvd) {
-      statusEl.textContent = "Kein TVD Kontakt ausgewählt/gefunden.";
-      return;
-    }
+function sanitizeAnlageName(raw){
 
-    logEl.textContent += "\nAuswertung läuft...\n";
-    statusEl.textContent = "Erzeuge Excel...";
+let name=raw.trim()
 
-    try {
-      let rows = [];
+name=name.replace(/_BR_.*/i,"")
+name=name.replace(/GPS-Position.*/i,"")
+name=name.replace(/<[^>]*>/g,"")
+name=name.replace(/\s+/g,"_")
+name=name.replace(/[^\w\-,.]/g,"")
 
-      for (const f of selectedFiles) {
-        const html = fileCache.get(f.name) ?? await readFileSmart(f);
-        const r = parseLog(html);
+return name
 
-        if (addFilename.checked) r.forEach(x => x.Datei = f.name);
+}
 
-        rows.push(...r);
-      }
 
-      rows.sort((a,b)=>toMs(a.Datum,a.Zeit) - toMs(b.Datum,b.Zeit));
+/* Parser */
 
-      // Sekunden-Spalte (auf Rohdaten)
-      addSeconds(rows, tvd);
+function parseLog(text){
 
-      // Ergebnisblatt auf Basis der Rohdaten (Originaldatum)
-      const results = buildResults(rows, tvd);
+const header=/Anlage:\s*([^\n\r]+)/.exec(text)
 
-      // Jetzt erst Datum für Excel umformatieren (Rohdatenblatt)
-      rows.forEach(r => { r.Datum = formatDate(r.Datum); });
+if(header){
+anlagenName=sanitizeAnlageName(header[1])
+}
 
-      const ws1 = XLSX.utils.json_to_sheet(rows);
-      const ws2 = XLSX.utils.json_to_sheet(results);
+const ts=`(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})`
+const re=new RegExp(ts+"\\s+([\\s\\S]*?)(?=\\s*"+ts+"|\\s*$)","g")
 
-      // Spaltenbreiten
-      const cols1 = [];
-      if (addFilename.checked) cols1.push({ wch: 30 });
-      cols1.push({ wch: 12 }, { wch: 14 }, { wch: 110 }, { wch: 22 });
-      ws1["!cols"] = cols1;
+const rows=[]
+let m
 
-      ws2["!cols"] = [{ wch: 22 }, { wch: 22 }, { wch: 10 }, { wch: 12 }, { wch: 16 }];
+while((m=re.exec(text))!==null){
 
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws1, "Daten");
-      XLSX.utils.book_append_sheet(wb, ws2, "Ergebnisse");
+let ereignis=m[3]
+.replace(/<br\s*\/?>/gi," ")
+.replace(/\bBR\b/g," ")
+.replace(/\s*\n\s*/g," ")
+.replace(/\s{2,}/g," ")
+.trim()
 
-      const today = new Date();
-      const dateStr = today.toISOString().slice(0,10).replace(/-/g,""); // YYYYMMDD
+if(ereignis.includes("SIEMENS AG - Transportation Systems")) continue
 
-      // Datum vorne, dann Anlage, dann TVD ohne :
-      const outName = `${dateStr}_${anlagenName}_TVD${tvd}.xlsx`;
+rows.push({
+Datum:m[1],
+Zeit:m[2],
+Ereignis:ereignis
+})
 
-      XLSX.writeFile(wb, outName);
+}
 
-      statusEl.textContent = "Auswertung erzeugt.";
-      logEl.textContent += `✓ Excel erstellt: ${outName}\n`;
+return rows
 
-    } catch (e) {
-      console.error(e);
-      statusEl.textContent = "Fehler beim Export (Konsole).";
-      logEl.textContent += `\nFehler: ${e?.message || e}\n`;
-    }
-  });
+}
+
+
+/* Kontakte */
+
+function findTvd(rows){
+
+const set=new Set()
+
+rows.forEach(r=>{
+const m=/ECAC:\s*\(TVD:(\d+)\)/.exec(r.Ereignis)
+if(m)set.add(m[1])
+})
+
+return [...set].sort((a,b)=>a-b)
+
+}
+
+
+/* Zeitmessung */
+
+function addSeconds(rows,tvd){
+
+const start="Lichtgruppe 1: Gelb anschalten"
+const re=new RegExp(`ECAC:\\s*\\(TVD:${tvd}\\)\\s*Achsen im Abschnitt:\\s*(\\d+)`)
+
+let startTime=null
+
+rows.forEach(r=>{
+
+r["Sekunden (Gelb→Achsen)"]=""
+
+const ms=toMs(r.Datum,r.Zeit)
+
+if(r.Ereignis.includes(start)){
+startTime=ms
+}
+
+if(startTime){
+
+const m=re.exec(r.Ereignis)
+
+if(m){
+
+r["Sekunden (Gelb→Achsen)"]=((ms-startTime)/1000).toFixed(3)
+
+startTime=null
+
+}
+
+}
+
+})
+
+}
+
+
+/* Ergebnisse */
+
+function buildResults(rows,tvd){
+
+const start="Lichtgruppe 1: Gelb anschalten"
+const re=new RegExp(`ECAC:\\s*\\(TVD:${tvd}\\)\\s*Achsen im Abschnitt:\\s*(\\d+)`)
+
+let startRow=null
+const res=[]
+
+rows.forEach(r=>{
+
+const ms=toMs(r.Datum,r.Zeit)
+
+if(r.Ereignis.includes(start)) startRow=r
+
+if(startRow){
+
+const m=re.exec(r.Ereignis)
+
+if(m){
+
+const diff=(ms-toMs(startRow.Datum,startRow.Zeit))/1000
+
+res.push({
+"Start Gelb":formatDate(startRow.Datum)+" "+startRow.Zeit,
+"Achsenzeit":formatDate(r.Datum)+" "+r.Zeit,
+"TVD":"TVD"+tvd,
+"Achsenwert":m[1],
+"Dauer Sekunden":diff.toFixed(3)
+})
+
+startRow=null
+
+}
+
+}
+
+})
+
+return res
+
+}
+
+
+/* Dateien laden */
+
+fileInput.addEventListener("change",async()=>{
+
+selectedFiles=[...fileInput.files]
+
+logEl.textContent="Dateien werden analysiert...\n"
+
+let allRows=[]
+
+for(const f of selectedFiles){
+
+const html=await readFileSmart(f)
+
+fileCache.set(f.name,html)
+
+const rows=parseLog(html)
+
+logEl.textContent+=f.name+" geladen\n"
+
+allRows.push(...rows)
+
+}
+
+const tvds=findTvd(allRows)
+
+tvdSelect.innerHTML=""
+
+tvds.forEach(v=>{
+const o=document.createElement("option")
+o.value=v
+o.textContent="TVD:"+v
+tvdSelect.appendChild(o)
+})
+
+tvdSelect.disabled=!tvds.length
+buildBtn.disabled=false
+
+logEl.textContent+="Kontakte erkannt: "+tvds.join(", ")
+
+})
+
+
+/* Excel */
+
+buildBtn.addEventListener("click",async()=>{
+
+logEl.textContent+="\nAuswertung läuft...\n"
+
+let rows=[]
+
+for(const f of selectedFiles){
+
+const html=fileCache.get(f.name)
+const r=parseLog(html)
+
+if(addFilename.checked) r.forEach(x=>x.Datei=f.name)
+
+rows.push(...r)
+
+}
+
+rows.sort((a,b)=>toMs(a.Datum,a.Zeit)-toMs(b.Datum,b.Zeit))
+
+const tvd=tvdSelect.value
+
+addSeconds(rows,tvd)
+
+const results=buildResults(rows,tvd)
+
+rows.forEach(r=>r.Datum=formatDate(r.Datum))
+
+const ws1=XLSX.utils.json_to_sheet(rows)
+const ws2=XLSX.utils.json_to_sheet(results)
+
+const wb=XLSX.utils.book_new()
+
+XLSX.utils.book_append_sheet(wb,ws1,"Daten")
+XLSX.utils.book_append_sheet(wb,ws2,"Ergebnisse")
+
+const today=new Date()
+const dateStr=today.toISOString().slice(0,10).replace(/-/g,"")
+
+const filename=`${dateStr}_${anlagenName}_TVD${tvd}.xlsx`
+
+XLSX.writeFile(wb,filename)
+
+statusEl.textContent="Auswertung erzeugt"
+
+logEl.textContent+="Excel erstellt\n"
+
+})
+
 </script>
 
 </body>
