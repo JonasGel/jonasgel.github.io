@@ -7,16 +7,11 @@
 <title>SIMIS Analyse</title>
 
 <style>
-
 body{
 font-family:system-ui,Segoe UI,Roboto,sans-serif;
 max-width:900px;
 margin:auto;
 padding:30px;
-}
-
-h1{
-margin-bottom:10px;
 }
 
 .card{
@@ -27,7 +22,7 @@ padding:20px;
 
 .row{
 display:flex;
-gap:10px;
+gap:12px;
 flex-wrap:wrap;
 align-items:center;
 margin-top:12px;
@@ -64,10 +59,8 @@ font-size:13px;
 color:#777;
 text-align:center;
 }
-
 </style>
 </head>
-
 
 <body>
 
@@ -119,9 +112,7 @@ const addFilename=document.getElementById("addFilename")
 
 let selectedFiles=[]
 const fileCache=new Map()
-
 let anlagenName="SIMIS"
-
 
 /* Encoding */
 
@@ -134,7 +125,6 @@ const r=new FileReader()
 r.onload=()=>{
 
 const buf=r.result
-
 const utf8=new TextDecoder("utf-8").decode(buf)
 
 if(utf8.includes("Ã")||utf8.includes("�")){
@@ -154,25 +144,7 @@ r.readAsArrayBuffer(file)
 }
 
 
-/* Datum Format */
-
-const MONTH={
-Jan:"01",Feb:"02",Mar:"03",Apr:"04",May:"05",Jun:"06",
-Jul:"07",Aug:"08",Sep:"09",Oct:"10",Nov:"11",Dec:"12"
-}
-
-function formatDate(d){
-
-const m=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
-
-if(!m)return d
-
-return `${m[1]}.${MONTH[m[2]]}.20${m[3]}`
-
-}
-
-
-/* ms Zeit */
+/* Zeitberechnung */
 
 const MONTHIDX={
 Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,
@@ -183,6 +155,8 @@ function toMs(d,z){
 
 const dm=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
 const tm=/(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(z)
+
+if(!dm||!tm)return NaN
 
 return Date.UTC(
 2000+Number(dm[3]),
@@ -197,19 +171,31 @@ Number(tm[4])
 }
 
 
-/* Log Parser */
+/* Datumformat für Excel */
 
-function parseLog(text){
+const MONTH={
+Jan:"01",Feb:"02",Mar:"03",Apr:"04",May:"05",Jun:"06",
+Jul:"07",Aug:"08",Sep:"09",Oct:"10",Nov:"11",Dec:"12"
+}
 
-if(text.includes("Anlage:")){
+function formatDate(d){
 
-const m=/Anlage:\s*(.+)/.exec(text)
-if(m)anlagenName=m[1].trim()
+const m=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
+if(!m)return d
+
+return `${m[1]}.${MONTH[m[2]]}.20${m[3]}`
 
 }
 
-const ts=`(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})`
 
+/* Parser */
+
+function parseLog(text){
+
+const header=/Anlage:\s*(.+)/.exec(text)
+if(header)anlagenName=header[1].trim()
+
+const ts=`(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})`
 const re=new RegExp(ts+"\\s+([\\s\\S]*?)(?=\\s*"+ts+"|\\s*$)","g")
 
 const rows=[]
@@ -222,7 +208,7 @@ let ereignis=m[3].replace(/\s*\n\s*/g," ").trim()
 if(ereignis.includes("SIEMENS AG - Transportation Systems")) continue
 
 rows.push({
-Datum:formatDate(m[1]),
+Datum:m[1],
 Zeit:m[2],
 Ereignis:ereignis
 })
@@ -313,8 +299,8 @@ if(m){
 const diff=(ms-toMs(startRow.Datum,startRow.Zeit))/1000
 
 res.push({
-"Start Gelb":startRow.Datum+" "+startRow.Zeit,
-"Achsenzeit":r.Datum+" "+r.Zeit,
+"Start Gelb":formatDate(startRow.Datum)+" "+startRow.Zeit,
+"Achsenzeit":formatDate(r.Datum)+" "+r.Zeit,
 "TVD":"TVD"+tvd,
 "Achsenwert":m[1],
 "Dauer Sekunden":diff.toFixed(3)
@@ -347,9 +333,7 @@ const html=await readFileSmart(f)
 
 fileCache.set(f.name,html)
 
-const doc=new DOMParser().parseFromString(html,"text/html")
-
-const rows=parseLog(doc.body.innerText)
+const rows=parseLog(html)
 
 allRows.push(...rows)
 
@@ -372,7 +356,7 @@ buildBtn.disabled=false
 })
 
 
-/* Excel */
+/* Excel Export */
 
 buildBtn.addEventListener("click",async()=>{
 
@@ -381,12 +365,9 @@ let rows=[]
 for(const f of selectedFiles){
 
 const html=fileCache.get(f.name)
+const r=parseLog(html)
 
-const doc=new DOMParser().parseFromString(html,"text/html")
-
-const r=parseLog(doc.body.innerText)
-
-if(addFilename.checked) r.forEach(x=>x.Datei=f.name)
+if(addFilename.checked)r.forEach(x=>x.Datei=f.name)
 
 rows.push(...r)
 
@@ -397,6 +378,8 @@ rows.sort((a,b)=>toMs(a.Datum,a.Zeit)-toMs(b.Datum,b.Zeit))
 const tvd=tvdSelect.value
 
 addSeconds(rows,tvd)
+
+rows.forEach(r=>r.Datum=formatDate(r.Datum))
 
 const results=buildResults(rows,tvd)
 
@@ -409,7 +392,6 @@ XLSX.utils.book_append_sheet(wb,ws1,"Daten")
 XLSX.utils.book_append_sheet(wb,ws2,"Ergebnisse")
 
 const today=new Date()
-
 const dateStr=today.toISOString().slice(0,10).replace(/-/g,"")
 
 const filename=`${anlagenName}_${dateStr}_TVD${tvd}.xlsx`
