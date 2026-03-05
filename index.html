@@ -96,6 +96,8 @@
   const fileCache = new Map();
   let anlagenName = "SIMIS";
 
+  const THRESHOLD_SECONDS = 240;
+
   // ---------- Encoding (UTF-8 -> windows-1252 fallback) ----------
   function readFileSmart(file){
     return new Promise((resolve,reject)=>{
@@ -191,10 +193,7 @@
   function findKontakte(rows){
     const set = new Set();
 
-    // TVD: ECAC: (TVD:201) Achsen im Abschnitt: 48
     const tvdRe = /ECAC:\s*\(TVD:(\d+)\)\s*Achsen im Abschnitt:\s*\d+/;
-
-    // Abschnitt: (Abschnitt: 205) 310/061 Achsen im Abschnitt: 48
     const absRe = /\(Abschnitt:\s*(\d+)\)\s*\d+\/\d+\s+Achsen im Abschnitt:\s*\d+/;
 
     for (const r of rows) {
@@ -205,7 +204,6 @@
       if (m) set.add(`ABS:${m[1]}`);
     }
 
-    // Sortierung: erst TVD, dann ABS, jeweils numerisch
     return Array.from(set).sort((a,b)=>{
       const [ta,na] = a.split(":");
       const [tb,nb] = b.split(":");
@@ -215,20 +213,15 @@
   }
 
   function kontaktLabelToToken(label){
-    // "TVD:201" -> "TVD201", "ABS:205" -> "ABS205"
     return label.replace(":", "");
   }
 
-  // ---------- Matcher für Achsenereignis je Kontakt ----------
   function makeAchsenRegex(kontaktLabel){
-    // kontaktLabel: "TVD:201" oder "ABS:205"
     const [typ, id] = kontaktLabel.split(":");
 
     if (typ === "TVD") {
       return new RegExp(String.raw`ECAC:\s*\(TVD:${id}\)\s*Achsen im Abschnitt:\s*(\d+)`);
     }
-
-    // Abschnitt
     return new RegExp(String.raw`\(\s*Abschnitt:\s*${id}\s*\)\s*\d+\/\d+\s+Achsen im Abschnitt:\s*(\d+)`);
   }
 
@@ -297,15 +290,18 @@
     return res;
   }
 
-  // ---------- Statistik-Sheet ----------
+  // ---------- Statistik-Sheet (inkl. > 240s Auswertung) ----------
   function buildStats(results, kontaktLabel, dateStr, anlage){
     const stats = [];
     stats.push({ Kennzahl: "Datum (Auswertung)", Wert: dateStr });
     stats.push({ Kennzahl: "Anlage", Wert: anlage });
     stats.push({ Kennzahl: "Kontakt", Wert: kontaktLabel.replace(":", "") });
+    stats.push({ Kennzahl: "Schwellwert (s)", Wert: THRESHOLD_SECONDS });
 
     if (!results.length) {
       stats.push({ Kennzahl: "Anzahl Zyklen", Wert: 0 });
+      stats.push({ Kennzahl: `Anzahl > ${THRESHOLD_SECONDS}s (schlecht)`, Wert: 0 });
+      stats.push({ Kennzahl: `Anzahl ≤ ${THRESHOLD_SECONDS}s (gut)`, Wert: 0 });
       return stats;
     }
 
@@ -325,7 +321,13 @@
     const variance = durs.reduce((acc,v)=>acc + Math.pow(v-avg,2), 0) / n;
     const std = Math.sqrt(variance);
 
+    const bad = durs.filter(v => v > THRESHOLD_SECONDS).length;
+    const good = n - bad;
+
     stats.push({ Kennzahl: "Anzahl Zyklen", Wert: n });
+    stats.push({ Kennzahl: `Anzahl > ${THRESHOLD_SECONDS}s (schlecht)`, Wert: bad });
+    stats.push({ Kennzahl: `Anzahl ≤ ${THRESHOLD_SECONDS}s (gut)`, Wert: good });
+
     stats.push({ Kennzahl: "Mittelwert (s)", Wert: Number(avg.toFixed(3)) });
     stats.push({ Kennzahl: "Median (s)", Wert: Number(median.toFixed(3)) });
     stats.push({ Kennzahl: "Minimum (s)", Wert: Number(min.toFixed(3)) });
@@ -365,7 +367,7 @@
         kontakte.forEach(v=>{
           const o=document.createElement("option");
           o.value=v;
-          o.textContent=v; // z.B. TVD:201 / ABS:205
+          o.textContent=v;
           kontaktSelect.appendChild(o);
         });
         kontaktSelect.disabled = false;
@@ -437,7 +439,7 @@
       const dateStr = today.toISOString().slice(0,10).replace(/-/g,""); // YYYYMMDD
       const statsRows = buildStats(results, kontaktLabel, dateStr, anlagenName);
       const ws3 = XLSX.utils.json_to_sheet(statsRows);
-      ws3["!cols"] = [{ wch: 24 }, { wch: 40 }];
+      ws3["!cols"] = [{ wch: 30 }, { wch: 40 }];
 
       // Workbook
       const wb = XLSX.utils.book_new();
