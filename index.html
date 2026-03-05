@@ -55,14 +55,13 @@
 <p>Bitte alle für die Auswertung relevanten Dimotools Protokolle auswählen.</p>
 
 <div class="card">
-
   <div class="row">
     <input id="files" type="file" multiple accept=".html,.htm">
   </div>
 
   <div class="row">
     <label>Erkannte Kontakte:</label>
-    <select id="tvdSelect" disabled></select>
+    <select id="kontaktSelect" disabled></select>
   </div>
 
   <div class="row">
@@ -79,7 +78,6 @@
 
   <h3>Log</h3>
   <pre id="log"></pre>
-
 </div>
 
 <div class="footer">Copyright Jonas Gelhaus 2026</div>
@@ -89,7 +87,7 @@
 <script>
   const fileInput = document.getElementById("files");
   const buildBtn = document.getElementById("build");
-  const tvdSelect = document.getElementById("tvdSelect");
+  const kontaktSelect = document.getElementById("kontaktSelect");
   const logEl = document.getElementById("log");
   const statusEl = document.getElementById("status");
   const addFilename = document.getElementById("addFilename");
@@ -116,9 +114,8 @@
     });
   }
 
-  // ---------- Zeitberechnung (Originalformat: 04.Mar.26) ----------
+  // ---------- Zeitberechnung (Originalformat: 01.Jan.26) ----------
   const MONTHIDX = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
-
   function toMs(d,z){
     const dm = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d);
     const tm = /(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(z);
@@ -145,23 +142,24 @@
   // ---------- Anlagenname säubern ----------
   function sanitizeAnlageName(raw){
     let name = (raw || "").trim();
-    // Artefakte abschneiden
     name = name.replace(/_BR_.*/i, "");
     name = name.replace(/GPS-Position.*/i, "");
-    // HTML Tags entfernen
     name = name.replace(/<[^>]*>/g, "");
-    // Whitespace -> _
     name = name.replace(/\s+/g, "_");
-    // erlaubte Zeichen
     name = name.replace(/[^\w\-,.]/g, "");
-    // Mehrfach _
     name = name.replace(/_+/g, "_").replace(/^_+|_+$/g, "");
     return name || "SIMIS";
   }
 
+  // ---------- Footer/Abschlusszeilen ignorieren ----------
+  function isCopyrightLine(s){
+    const t = (s || "").toLowerCase();
+    return t.includes("copyright") && t.includes("all rights reserved");
+  }
+
   // ---------- Parser ----------
   function parseLog(text){
-    const header = /Anlage:\s*([^\n\r]+)/.exec(text);
+    const header = /Anlage:\s*([^\n\r<]+)/.exec(text);
     if(header){
       anlagenName = sanitizeAnlageName(header[1]);
     }
@@ -175,15 +173,13 @@
     while ((m = re.exec(text)) !== null) {
       let ereignis = (m[3] || "")
         .replace(/<br\s*\/?>/gi," ")
-        .replace(/\bBR\b/g," ")
         .replace(/\s*\n\s*/g," ")
         .replace(/\s{2,}/g," ")
         .trim();
 
       if (!ereignis) continue;
-
-      // Abschlusszeile ignorieren
       if (ereignis.includes("SIEMENS AG - Transportation Systems")) continue;
+      if (isCopyrightLine(ereignis)) continue;
 
       rows.push({ Datum: m[1], Zeit: m[2], Ereignis: ereignis });
     }
@@ -191,20 +187,56 @@
     return rows;
   }
 
-  // ---------- TVD Kontakte finden ----------
-  function findTvd(rows){
+  // ---------- Kontakte finden (TVD + Abschnitt) ----------
+  function findKontakte(rows){
     const set = new Set();
-    rows.forEach(r=>{
-      const m = /ECAC:\s*\(TVD:(\d+)\)/.exec(r.Ereignis);
-      if(m) set.add(m[1]);
+
+    // TVD: ECAC: (TVD:201) Achsen im Abschnitt: 48
+    const tvdRe = /ECAC:\s*\(TVD:(\d+)\)\s*Achsen im Abschnitt:\s*\d+/;
+
+    // Abschnitt: (Abschnitt: 205) 310/061 Achsen im Abschnitt: 48
+    const absRe = /\(Abschnitt:\s*(\d+)\)\s*\d+\/\d+\s+Achsen im Abschnitt:\s*\d+/;
+
+    for (const r of rows) {
+      const e = r.Ereignis || "";
+      let m = tvdRe.exec(e);
+      if (m) set.add(`TVD:${m[1]}`);
+      m = absRe.exec(e);
+      if (m) set.add(`ABS:${m[1]}`);
+    }
+
+    // Sortierung: erst TVD, dann ABS, jeweils numerisch
+    return Array.from(set).sort((a,b)=>{
+      const [ta,na] = a.split(":");
+      const [tb,nb] = b.split(":");
+      if (ta !== tb) return ta.localeCompare(tb);
+      return Number(na) - Number(nb);
     });
-    return [...set].sort((a,b)=>Number(a)-Number(b));
+  }
+
+  function kontaktLabelToToken(label){
+    // "TVD:201" -> "TVD201", "ABS:205" -> "ABS205"
+    return label.replace(":", "");
+  }
+
+  // ---------- Matcher für Achsenereignis je Kontakt ----------
+  function makeAchsenRegex(kontaktLabel){
+    // kontaktLabel: "TVD:201" oder "ABS:205"
+    const [typ, id] = kontaktLabel.split(":");
+
+    if (typ === "TVD") {
+      return new RegExp(String.raw`ECAC:\s*\(TVD:${id}\)\s*Achsen im Abschnitt:\s*(\d+)`);
+    }
+
+    // Abschnitt
+    return new RegExp(String.raw`\(\s*Abschnitt:\s*${id}\s*\)\s*\d+\/\d+\s+Achsen im Abschnitt:\s*(\d+)`);
   }
 
   // ---------- Sekunden-Spalte (auf Achsenzeile) ----------
-  function addSeconds(rows, tvd){
+  function addSeconds(rows, kontaktLabel){
     const startNeedle = "Lichtgruppe 1: Gelb anschalten";
-    const re = new RegExp(`ECAC:\\s*\\(TVD:${tvd}\\)\\s*Achsen im Abschnitt:\\s*(\\d+)`);
+    const achsenRe = makeAchsenRegex(kontaktLabel);
+
     let startMs = null;
 
     rows.forEach(r=>{
@@ -218,7 +250,7 @@
       }
 
       if (startMs !== null) {
-        const m = re.exec(r.Ereignis || "");
+        const m = achsenRe.exec(r.Ereignis || "");
         if (m) {
           r["Sekunden (Gelb→Achsen)"] = Number(((ms - startMs)/1000).toFixed(3));
           startMs = null;
@@ -227,10 +259,10 @@
     });
   }
 
-  // ---------- Ergebnisblatt (Zyklus-Tabelle) ----------
-  function buildResults(rows, tvd){
+  // ---------- Ergebnisblatt (Zyklen) ----------
+  function buildResults(rows, kontaktLabel){
     const startNeedle = "Lichtgruppe 1: Gelb anschalten";
-    const re = new RegExp(`ECAC:\\s*\\(TVD:${tvd}\\)\\s*Achsen im Abschnitt:\\s*(\\d+)`);
+    const achsenRe = makeAchsenRegex(kontaktLabel);
 
     let startRow = null;
     const res = [];
@@ -245,16 +277,18 @@
       }
 
       if (startRow) {
-        const m = re.exec(r.Ereignis || "");
+        const m = achsenRe.exec(r.Ereignis || "");
         if (m) {
           const diff = (ms - toMs(startRow.Datum, startRow.Zeit)) / 1000;
+
           res.push({
             "Start Gelb": `${formatDate(startRow.Datum)} ${startRow.Zeit}`,
             "Achsenzeit": `${formatDate(r.Datum)} ${r.Zeit}`,
-            "TVD": `TVD${tvd}`,
+            "Kontakt": kontaktLabel.replace(":", ""),
             "Achsenwert": Number(m[1]),
             "Dauer Sekunden": Number(diff.toFixed(3))
           });
+
           startRow = null;
         }
       }
@@ -263,12 +297,12 @@
     return res;
   }
 
-  // ---------- Statistik berechnen (separates Sheet) ----------
-  function buildStats(results, tvd, dateStr, anlage){
+  // ---------- Statistik-Sheet ----------
+  function buildStats(results, kontaktLabel, dateStr, anlage){
     const stats = [];
     stats.push({ Kennzahl: "Datum (Auswertung)", Wert: dateStr });
     stats.push({ Kennzahl: "Anlage", Wert: anlage });
-    stats.push({ Kennzahl: "Kontakt", Wert: `TVD${tvd}` });
+    stats.push({ Kennzahl: "Kontakt", Wert: kontaktLabel.replace(":", "") });
 
     if (!results.length) {
       stats.push({ Kennzahl: "Anzahl Zyklen", Wert: 0 });
@@ -283,21 +317,19 @@
     const min = Math.min(...durs);
     const max = Math.max(...durs);
 
-    // Median
     const sorted = [...durs].sort((a,b)=>a-b);
     const median = (n % 2 === 1)
       ? sorted[(n-1)/2]
       : (sorted[n/2 - 1] + sorted[n/2]) / 2;
+
+    const variance = durs.reduce((acc,v)=>acc + Math.pow(v-avg,2), 0) / n;
+    const std = Math.sqrt(variance);
 
     stats.push({ Kennzahl: "Anzahl Zyklen", Wert: n });
     stats.push({ Kennzahl: "Mittelwert (s)", Wert: Number(avg.toFixed(3)) });
     stats.push({ Kennzahl: "Median (s)", Wert: Number(median.toFixed(3)) });
     stats.push({ Kennzahl: "Minimum (s)", Wert: Number(min.toFixed(3)) });
     stats.push({ Kennzahl: "Maximum (s)", Wert: Number(max.toFixed(3)) });
-
-    // Optional: Standardabweichung (Population)
-    const variance = durs.reduce((acc,v)=>acc + Math.pow(v-avg,2), 0) / n;
-    const std = Math.sqrt(variance);
     stats.push({ Kennzahl: "Std-Abw (s)", Wert: Number(std.toFixed(3)) });
 
     return stats;
@@ -310,8 +342,8 @@
     logEl.textContent = "";
     statusEl.textContent = "";
     buildBtn.disabled = true;
-    tvdSelect.innerHTML = "";
-    tvdSelect.disabled = true;
+    kontaktSelect.innerHTML = "";
+    kontaktSelect.disabled = true;
 
     if (!selectedFiles.length) return;
 
@@ -327,24 +359,24 @@
         logEl.textContent += `✓ ${f.name}: ${rows.length} Zeilen\n`;
       }
 
-      const tvds = findTvd(allRows);
+      const kontakte = findKontakte(allRows);
 
-      if (tvds.length) {
-        tvds.forEach(v=>{
+      if (kontakte.length) {
+        kontakte.forEach(v=>{
           const o=document.createElement("option");
           o.value=v;
-          o.textContent=`TVD:${v}`;
-          tvdSelect.appendChild(o);
+          o.textContent=v; // z.B. TVD:201 / ABS:205
+          kontaktSelect.appendChild(o);
         });
-        tvdSelect.disabled = false;
-        logEl.textContent += `\nKontakte erkannt: ${tvds.map(x=>"TVD:"+x).join(", ")}\n`;
+        kontaktSelect.disabled = false;
+        logEl.textContent += `\nKontakte erkannt: ${kontakte.join(", ")}\n`;
       } else {
         const o=document.createElement("option");
         o.value="";
-        o.textContent="(keine TVD gefunden)";
-        tvdSelect.appendChild(o);
-        tvdSelect.disabled=true;
-        logEl.textContent += "\nKeine TVD Kontakte gefunden.\n";
+        o.textContent="(keine Kontakte gefunden)";
+        kontaktSelect.appendChild(o);
+        kontaktSelect.disabled=true;
+        logEl.textContent += "\nKeine Kontakte gefunden.\n";
       }
 
       buildBtn.disabled = false;
@@ -362,9 +394,9 @@
   buildBtn.addEventListener("click", async () => {
     if (!selectedFiles.length) return;
 
-    const tvd = tvdSelect.disabled ? "" : tvdSelect.value;
-    if (!tvd) {
-      statusEl.textContent = "Kein TVD Kontakt ausgewählt/gefunden.";
+    const kontaktLabel = kontaktSelect.disabled ? "" : kontaktSelect.value;
+    if (!kontaktLabel) {
+      statusEl.textContent = "Kein Kontakt ausgewählt/gefunden.";
       return;
     }
 
@@ -384,11 +416,8 @@
 
       rows.sort((a,b)=>toMs(a.Datum,a.Zeit) - toMs(b.Datum,b.Zeit));
 
-      // Sekunden-Spalte Rohdaten
-      addSeconds(rows, tvd);
-
-      // Ergebnisse (Zyklen) basierend auf Rohdaten (Originaldatum)
-      const results = buildResults(rows, tvd);
+      addSeconds(rows, kontaktLabel);
+      const results = buildResults(rows, kontaktLabel);
 
       // Datum fürs Rohdatenblatt umformatieren
       rows.forEach(r => { r.Datum = formatDate(r.Datum); });
@@ -401,12 +430,12 @@
       if (addFilename.checked) cols1.push({ wch: 30 });
       cols1.push({ wch: 12 }, { wch: 14 }, { wch: 110 }, { wch: 22 });
       ws1["!cols"] = cols1;
-      ws2["!cols"] = [{ wch: 22 }, { wch: 22 }, { wch: 10 }, { wch: 12 }, { wch: 16 }];
+      ws2["!cols"] = [{ wch: 22 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 16 }];
 
       // Statistik-Sheet
       const today = new Date();
       const dateStr = today.toISOString().slice(0,10).replace(/-/g,""); // YYYYMMDD
-      const statsRows = buildStats(results, tvd, dateStr, anlagenName);
+      const statsRows = buildStats(results, kontaktLabel, dateStr, anlagenName);
       const ws3 = XLSX.utils.json_to_sheet(statsRows);
       ws3["!cols"] = [{ wch: 24 }, { wch: 40 }];
 
@@ -416,8 +445,9 @@
       XLSX.utils.book_append_sheet(wb, ws2, "Ergebnisse");
       XLSX.utils.book_append_sheet(wb, ws3, "Statistik");
 
-      // Dateiname: Datum vorne, dann Anlage, dann TVD ohne :
-      const outName = `${dateStr}_${anlagenName}_TVD${tvd}.xlsx`;
+      // Dateiname: Datum vorne, dann Anlage, dann Kontakt ohne :
+      const token = kontaktLabelToToken(kontaktLabel); // TVD201 oder ABS205
+      const outName = `${dateStr}_${anlagenName}_${token}.xlsx`;
 
       XLSX.writeFile(wb, outName);
 
