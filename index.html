@@ -82,7 +82,8 @@
 
 <div class="footer">Copyright Jonas Gelhaus 2026</div>
 
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- Wichtig: xlsx-js-style statt xlsx, damit Styles (gelb) in Excel funktionieren -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
 <script>
   const fileInput = document.getElementById("files");
@@ -337,6 +338,28 @@
     return stats;
   }
 
+  // ---------- Styling: Zeilen > Threshold gelb markieren ----------
+  function highlightBadRows(ws, results, thresholdSeconds){
+    // Ergebnisse-Sheet ist aus json_to_sheet erstellt:
+    // Header in Zeile 1, Daten ab Zeile 2
+    const range = XLSX.utils.decode_range(ws["!ref"] || "A1:A1");
+    const styleYellow = {
+      fill: { patternType: "solid", fgColor: { rgb: "FFF2CC" } } // hellgelb
+    };
+
+    for (let i = 0; i < results.length; i++){
+      const dur = results[i]["Dauer Sekunden"];
+      if (!Number.isFinite(dur) || dur <= thresholdSeconds) continue;
+
+      const rowNumber = 2 + i; // Excel-Zeile (1=Header)
+      for (let c = range.s.c; c <= range.e.c; c++){
+        const addr = XLSX.utils.encode_cell({ r: rowNumber - 1, c }); // r ist 0-based
+        if (!ws[addr]) ws[addr] = { t: "s", v: "" };
+        ws[addr].s = styleYellow;
+      }
+    }
+  }
+
   // ---------- UI: Dateien auswählen -> analysieren & Dropdown ----------
   fileInput.addEventListener("change", async () => {
     selectedFiles = [...fileInput.files];
@@ -433,6 +456,9 @@
       cols1.push({ wch: 12 }, { wch: 14 }, { wch: 110 }, { wch: 22 });
       ws1["!cols"] = cols1;
       ws2["!cols"] = [{ wch: 22 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 16 }];
+
+      // Ergebnisse: Zeilen > 240s gelb markieren
+      highlightBadRows(ws2, results, THRESHOLD_SECONDS);
 
       // Statistik-Sheet
       const today = new Date();
