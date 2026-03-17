@@ -6,46 +6,12 @@
 <title>SIMIS Analyse</title>
 
 <style>
-  body{
-    font-family:system-ui,Segoe UI,Roboto,sans-serif;
-    max-width:900px;
-    margin:auto;
-    padding:30px;
-  }
-  .card{
-    border:1px solid #ddd;
-    border-radius:12px;
-    padding:20px;
-  }
-  .row{
-    display:flex;
-    gap:12px;
-    flex-wrap:wrap;
-    align-items:center;
-    margin-top:12px;
-  }
-  button{
-    padding:10px 16px;
-    border-radius:10px;
-    border:1px solid #ccc;
-    background:white;
-    cursor:pointer;
-  }
-  button:disabled{ opacity:.5; cursor:not-allowed; }
-  pre{
-    background:#f7f7f7;
-    padding:12px;
-    border-radius:8px;
-    max-height:260px;
-    overflow:auto;
-    white-space:pre-wrap;
-  }
-  .footer{
-    margin-top:30px;
-    font-size:13px;
-    color:#777;
-    text-align:center;
-  }
+body{font-family:system-ui;max-width:900px;margin:auto;padding:30px}
+.card{border:1px solid #ddd;border-radius:12px;padding:20px}
+.row{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+button{padding:10px 16px;border-radius:10px;border:1px solid #ccc;cursor:pointer}
+pre{background:#f7f7f7;padding:12px;border-radius:8px;max-height:260px;overflow:auto}
+.footer{margin-top:30px;text-align:center;color:#777}
 </style>
 </head>
 
@@ -55,440 +21,287 @@
 <p>Bitte alle für die Auswertung relevanten Dimotools Protokolle auswählen.</p>
 
 <div class="card">
-  <div class="row">
-    <input id="files" type="file" multiple accept=".html,.htm">
-  </div>
 
-  <div class="row">
-    <label>Erkannte Kontakte:</label>
-    <select id="kontaktSelect" disabled></select>
-  </div>
+<input id="files" type="file" multiple>
 
-  <div class="row">
-    <label>
-      <input type="checkbox" id="addFilename" checked>
-      Dateiname-Spalte hinzufügen
-    </label>
-  </div>
+<div class="row">
+<select id="kontaktSelect"></select>
+</div>
 
-  <div class="row">
-    <button id="build" disabled>Auswertung erzeugen</button>
-    <span id="status"></span>
-  </div>
+<div class="row">
+<label><input type="checkbox" id="addFilename" checked> Dateiname-Spalte</label>
+</div>
 
-  <h3>Log</h3>
-  <pre id="log"></pre>
+<div class="row">
+<button id="build">Auswertung erzeugen</button>
+<span id="status"></span>
+</div>
+
+<pre id="log"></pre>
+
 </div>
 
 <div class="footer">Copyright Jonas Gelhaus 2026</div>
 
-<!-- Wichtig: xlsx-js-style statt xlsx, damit Styles (gelb) in Excel funktionieren -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
 <script>
-  const fileInput = document.getElementById("files");
-  const buildBtn = document.getElementById("build");
-  const kontaktSelect = document.getElementById("kontaktSelect");
-  const logEl = document.getElementById("log");
-  const statusEl = document.getElementById("status");
-  const addFilename = document.getElementById("addFilename");
-
-  let selectedFiles = [];
-  const fileCache = new Map();
-  let anlagenName = "SIMIS";
-
-  const THRESHOLD_SECONDS = 240;
-
-  // ---------- Encoding (UTF-8 -> windows-1252 fallback) ----------
-  function readFileSmart(file){
-    return new Promise((resolve,reject)=>{
-      const r = new FileReader();
-      r.onload = ()=>{
-        const buf = r.result;
-        const utf8 = new TextDecoder("utf-8").decode(buf);
-        if (utf8.includes("Ã") || utf8.includes("�")) {
-          resolve(new TextDecoder("windows-1252").decode(buf));
-        } else {
-          resolve(utf8);
-        }
-      };
-      r.onerror = ()=>reject(r.error);
-      r.readAsArrayBuffer(file);
-    });
-  }
-
-  // ---------- Zeitberechnung (Originalformat: 01.Jan.26) ----------
-  const MONTHIDX = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
-  function toMs(d,z){
-    const dm = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d);
-    const tm = /(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(z);
-    if(!dm || !tm) return NaN;
-    return Date.UTC(
-      2000 + Number(dm[3]),
-      MONTHIDX[dm[2]],
-      Number(dm[1]),
-      Number(tm[1]),
-      Number(tm[2]),
-      Number(tm[3]),
-      Number(tm[4])
-    );
-  }
-
-  // ---------- Datum formatieren für Excel (DD.MM.YYYY) ----------
-  const MONTH = {Jan:"01",Feb:"02",Mar:"03",Apr:"04",May:"05",Jun:"06",Jul:"07",Aug:"08",Sep:"09",Oct:"10",Nov:"11",Dec:"12"};
-  function formatDate(d){
-    const m = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d);
-    if(!m) return d;
-    return `${m[1]}.${MONTH[m[2]]}.20${m[3]}`;
-  }
-
-  // ---------- Anlagenname säubern ----------
-  function sanitizeAnlageName(raw){
-    let name = (raw || "").trim();
-    name = name.replace(/_BR_.*/i, "");
-    name = name.replace(/GPS-Position.*/i, "");
-    name = name.replace(/<[^>]*>/g, "");
-    name = name.replace(/\s+/g, "_");
-    name = name.replace(/[^\w\-,.]/g, "");
-    name = name.replace(/_+/g, "_").replace(/^_+|_+$/g, "");
-    return name || "SIMIS";
-  }
-
-  // ---------- Footer/Abschlusszeilen ignorieren ----------
-  function isCopyrightLine(s){
-    const t = (s || "").toLowerCase();
-    return t.includes("copyright") && t.includes("all rights reserved");
-  }
-
-  // ---------- Parser ----------
-  function parseLog(text){
-    const header = /Anlage:\s*([^\n\r<]+)/.exec(text);
-    if(header){
-      anlagenName = sanitizeAnlageName(header[1]);
-    }
-
-    const ts = `(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})`;
-    const re = new RegExp(ts + "\\s+([\\s\\S]*?)(?=\\s*" + ts + "|\\s*$)", "g");
-
-    const rows = [];
-    let m;
-
-    while ((m = re.exec(text)) !== null) {
-      let ereignis = (m[3] || "")
-        .replace(/<br\s*\/?>/gi," ")
-        .replace(/\s*\n\s*/g," ")
-        .replace(/\s{2,}/g," ")
-        .trim();
-
-      if (!ereignis) continue;
-      if (ereignis.includes("SIEMENS AG - Transportation Systems")) continue;
-      if (isCopyrightLine(ereignis)) continue;
-
-      rows.push({ Datum: m[1], Zeit: m[2], Ereignis: ereignis });
-    }
-
-    return rows;
-  }
-
-  // ---------- Kontakte finden (TVD + Abschnitt) ----------
-  function findKontakte(rows){
-    const set = new Set();
-
-    const tvdRe = /ECAC:\s*\(TVD:(\d+)\)\s*Achsen im Abschnitt:\s*\d+/;
-    const absRe = /\(Abschnitt:\s*(\d+)\)\s*\d+\/\d+\s+Achsen im Abschnitt:\s*\d+/;
-
-    for (const r of rows) {
-      const e = r.Ereignis || "";
-      let m = tvdRe.exec(e);
-      if (m) set.add(`TVD:${m[1]}`);
-      m = absRe.exec(e);
-      if (m) set.add(`ABS:${m[1]}`);
-    }
-
-    return Array.from(set).sort((a,b)=>{
-      const [ta,na] = a.split(":");
-      const [tb,nb] = b.split(":");
-      if (ta !== tb) return ta.localeCompare(tb);
-      return Number(na) - Number(nb);
-    });
-  }
-
-  function kontaktLabelToToken(label){
-    return label.replace(":", "");
-  }
-
-  function makeAchsenRegex(kontaktLabel){
-    const [typ, id] = kontaktLabel.split(":");
-
-    if (typ === "TVD") {
-      return new RegExp(String.raw`ECAC:\s*\(TVD:${id}\)\s*Achsen im Abschnitt:\s*(\d+)`);
-    }
-    return new RegExp(String.raw`\(\s*Abschnitt:\s*${id}\s*\)\s*\d+\/\d+\s+Achsen im Abschnitt:\s*(\d+)`);
-  }
-
-  // ---------- Sekunden-Spalte (auf Achsenzeile) ----------
-  function addSeconds(rows, kontaktLabel){
-    const startNeedle = "Lichtgruppe 1: Gelb anschalten";
-    const achsenRe = makeAchsenRegex(kontaktLabel);
-
-    let startMs = null;
-
-    rows.forEach(r=>{
-      r["Sekunden (Gelb→Achsen)"] = "";
-      const ms = toMs(r.Datum, r.Zeit);
-      if (!Number.isFinite(ms)) return;
-
-      if ((r.Ereignis || "").includes(startNeedle)) {
-        startMs = ms;
-        return;
-      }
-
-      if (startMs !== null) {
-        const m = achsenRe.exec(r.Ereignis || "");
-        if (m) {
-          r["Sekunden (Gelb→Achsen)"] = Number(((ms - startMs)/1000).toFixed(3));
-          startMs = null;
-        }
-      }
-    });
-  }
-
-  // ---------- Ergebnisblatt (Zyklen) ----------
-  function buildResults(rows, kontaktLabel){
-    const startNeedle = "Lichtgruppe 1: Gelb anschalten";
-    const achsenRe = makeAchsenRegex(kontaktLabel);
-
-    let startRow = null;
-    const res = [];
-
-    rows.forEach(r=>{
-      const ms = toMs(r.Datum, r.Zeit);
-      if (!Number.isFinite(ms)) return;
-
-      if ((r.Ereignis || "").includes(startNeedle)) {
-        startRow = r;
-        return;
-      }
-
-      if (startRow) {
-        const m = achsenRe.exec(r.Ereignis || "");
-        if (m) {
-          const diff = (ms - toMs(startRow.Datum, startRow.Zeit)) / 1000;
-
-          res.push({
-            "Start Gelb": `${formatDate(startRow.Datum)} ${startRow.Zeit}`,
-            "Achsenzeit": `${formatDate(r.Datum)} ${r.Zeit}`,
-            "Kontakt": kontaktLabel.replace(":", ""),
-            "Achsenwert": Number(m[1]),
-            "Dauer Sekunden": Number(diff.toFixed(3))
-          });
-
-          startRow = null;
-        }
-      }
-    });
-
-    return res;
-  }
-
-  // ---------- Statistik-Sheet (inkl. > 240s Auswertung) ----------
-  function buildStats(results, kontaktLabel, dateStr, anlage){
-    const stats = [];
-    stats.push({ Kennzahl: "Datum (Auswertung)", Wert: dateStr });
-    stats.push({ Kennzahl: "Anlage", Wert: anlage });
-    stats.push({ Kennzahl: "Kontakt", Wert: kontaktLabel.replace(":", "") });
-    stats.push({ Kennzahl: "Schwellwert (s)", Wert: THRESHOLD_SECONDS });
-
-    if (!results.length) {
-      stats.push({ Kennzahl: "Anzahl Zyklen", Wert: 0 });
-      stats.push({ Kennzahl: `Anzahl > ${THRESHOLD_SECONDS}s (schlecht)`, Wert: 0 });
-      stats.push({ Kennzahl: `Anzahl ≤ ${THRESHOLD_SECONDS}s (gut)`, Wert: 0 });
-      return stats;
-    }
-
-    const durs = results.map(r => r["Dauer Sekunden"]).filter(v => Number.isFinite(v));
-    const n = durs.length;
-
-    const sum = durs.reduce((a,b)=>a+b,0);
-    const avg = sum / n;
-    const min = Math.min(...durs);
-    const max = Math.max(...durs);
-
-    const sorted = [...durs].sort((a,b)=>a-b);
-    const median = (n % 2 === 1)
-      ? sorted[(n-1)/2]
-      : (sorted[n/2 - 1] + sorted[n/2]) / 2;
-
-    const variance = durs.reduce((acc,v)=>acc + Math.pow(v-avg,2), 0) / n;
-    const std = Math.sqrt(variance);
-
-    const bad = durs.filter(v => v > THRESHOLD_SECONDS).length;
-    const good = n - bad;
-
-    stats.push({ Kennzahl: "Anzahl Zyklen", Wert: n });
-    stats.push({ Kennzahl: `Anzahl > ${THRESHOLD_SECONDS}s (schlecht)`, Wert: bad });
-    stats.push({ Kennzahl: `Anzahl ≤ ${THRESHOLD_SECONDS}s (gut)`, Wert: good });
-
-    stats.push({ Kennzahl: "Mittelwert (s)", Wert: Number(avg.toFixed(3)) });
-    stats.push({ Kennzahl: "Median (s)", Wert: Number(median.toFixed(3)) });
-    stats.push({ Kennzahl: "Minimum (s)", Wert: Number(min.toFixed(3)) });
-    stats.push({ Kennzahl: "Maximum (s)", Wert: Number(max.toFixed(3)) });
-    stats.push({ Kennzahl: "Std-Abw (s)", Wert: Number(std.toFixed(3)) });
-
-    return stats;
-  }
-
-  // ---------- Styling: Zeilen > Threshold gelb markieren ----------
-  function highlightBadRows(ws, results, thresholdSeconds){
-    // Ergebnisse-Sheet ist aus json_to_sheet erstellt:
-    // Header in Zeile 1, Daten ab Zeile 2
-    const range = XLSX.utils.decode_range(ws["!ref"] || "A1:A1");
-    const styleYellow = {
-      fill: { patternType: "solid", fgColor: { rgb: "FFF2CC" } } // hellgelb
-    };
-
-    for (let i = 0; i < results.length; i++){
-      const dur = results[i]["Dauer Sekunden"];
-      if (!Number.isFinite(dur) || dur <= thresholdSeconds) continue;
-
-      const rowNumber = 2 + i; // Excel-Zeile (1=Header)
-      for (let c = range.s.c; c <= range.e.c; c++){
-        const addr = XLSX.utils.encode_cell({ r: rowNumber - 1, c }); // r ist 0-based
-        if (!ws[addr]) ws[addr] = { t: "s", v: "" };
-        ws[addr].s = styleYellow;
-      }
-    }
-  }
-
-  // ---------- UI: Dateien auswählen -> analysieren & Dropdown ----------
-  fileInput.addEventListener("change", async () => {
-    selectedFiles = [...fileInput.files];
-    fileCache.clear();
-    logEl.textContent = "";
-    statusEl.textContent = "";
-    buildBtn.disabled = true;
-    kontaktSelect.innerHTML = "";
-    kontaktSelect.disabled = true;
-
-    if (!selectedFiles.length) return;
-
-    logEl.textContent = "Dateien werden analysiert...\n";
-    let allRows = [];
-
-    try {
-      for (const f of selectedFiles) {
-        const html = await readFileSmart(f);
-        fileCache.set(f.name, html);
-        const rows = parseLog(html);
-        allRows.push(...rows);
-        logEl.textContent += `✓ ${f.name}: ${rows.length} Zeilen\n`;
-      }
-
-      const kontakte = findKontakte(allRows);
-
-      if (kontakte.length) {
-        kontakte.forEach(v=>{
-          const o=document.createElement("option");
-          o.value=v;
-          o.textContent=v;
-          kontaktSelect.appendChild(o);
-        });
-        kontaktSelect.disabled = false;
-        logEl.textContent += `\nKontakte erkannt: ${kontakte.join(", ")}\n`;
-      } else {
-        const o=document.createElement("option");
-        o.value="";
-        o.textContent="(keine Kontakte gefunden)";
-        kontaktSelect.appendChild(o);
-        kontaktSelect.disabled=true;
-        logEl.textContent += "\nKeine Kontakte gefunden.\n";
-      }
-
-      buildBtn.disabled = false;
-      statusEl.textContent = "Bereit.";
-
-    } catch (e) {
-      console.error(e);
-      statusEl.textContent = "Fehler beim Einlesen (Konsole).";
-      logEl.textContent += `\nFehler: ${e?.message || e}\n`;
-      buildBtn.disabled = true;
-    }
-  });
-
-  // ---------- Export ----------
-  buildBtn.addEventListener("click", async () => {
-    if (!selectedFiles.length) return;
-
-    const kontaktLabel = kontaktSelect.disabled ? "" : kontaktSelect.value;
-    if (!kontaktLabel) {
-      statusEl.textContent = "Kein Kontakt ausgewählt/gefunden.";
-      return;
-    }
-
-    logEl.textContent += "\nAuswertung läuft...\n";
-    statusEl.textContent = "Erzeuge Excel...";
-
-    try {
-      let rows = [];
-
-      for (const f of selectedFiles) {
-        const html = fileCache.get(f.name) ?? await readFileSmart(f);
-        const r = parseLog(html);
-
-        if (addFilename.checked) r.forEach(x => x.Datei = f.name);
-        rows.push(...r);
-      }
-
-      rows.sort((a,b)=>toMs(a.Datum,a.Zeit) - toMs(b.Datum,b.Zeit));
-
-      addSeconds(rows, kontaktLabel);
-      const results = buildResults(rows, kontaktLabel);
-
-      // Datum fürs Rohdatenblatt umformatieren
-      rows.forEach(r => { r.Datum = formatDate(r.Datum); });
-
-      const ws1 = XLSX.utils.json_to_sheet(rows);
-      const ws2 = XLSX.utils.json_to_sheet(results);
-
-      // Spaltenbreiten
-      const cols1 = [];
-      if (addFilename.checked) cols1.push({ wch: 30 });
-      cols1.push({ wch: 12 }, { wch: 14 }, { wch: 110 }, { wch: 22 });
-      ws1["!cols"] = cols1;
-      ws2["!cols"] = [{ wch: 22 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 16 }];
-
-      // Ergebnisse: Zeilen > 240s gelb markieren
-      highlightBadRows(ws2, results, THRESHOLD_SECONDS);
-
-      // Statistik-Sheet
-      const today = new Date();
-      const dateStr = today.toISOString().slice(0,10).replace(/-/g,""); // YYYYMMDD
-      const statsRows = buildStats(results, kontaktLabel, dateStr, anlagenName);
-      const ws3 = XLSX.utils.json_to_sheet(statsRows);
-      ws3["!cols"] = [{ wch: 30 }, { wch: 40 }];
-
-      // Workbook
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws1, "Daten");
-      XLSX.utils.book_append_sheet(wb, ws2, "Ergebnisse");
-      XLSX.utils.book_append_sheet(wb, ws3, "Statistik");
-
-      // Dateiname: Datum vorne, dann Anlage, dann Kontakt ohne :
-      const token = kontaktLabelToToken(kontaktLabel); // TVD201 oder ABS205
-      const outName = `${dateStr}_${anlagenName}_${token}.xlsx`;
-
-      XLSX.writeFile(wb, outName);
-
-      statusEl.textContent = "Auswertung erzeugt.";
-      logEl.textContent += `✓ Excel erstellt: ${outName}\n`;
-
-    } catch (e) {
-      console.error(e);
-      statusEl.textContent = "Fehler beim Export (Konsole).";
-      logEl.textContent += `\nFehler: ${e?.message || e}\n`;
-    }
-  });
+
+const THRESHOLD=240
+
+const fileInput=document.getElementById("files")
+const kontaktSelect=document.getElementById("kontaktSelect")
+const logEl=document.getElementById("log")
+const statusEl=document.getElementById("status")
+const buildBtn=document.getElementById("build")
+const addFilename=document.getElementById("addFilename")
+
+let fileCache=new Map()
+let anlagenName="SIMIS"
+
+/* Encoding */
+function readFileSmart(file){
+return new Promise(res=>{
+const r=new FileReader()
+r.onload=()=>{
+let t=new TextDecoder("utf-8").decode(r.result)
+if(t.includes("Ã")) t=new TextDecoder("windows-1252").decode(r.result)
+res(t)
+}
+r.readAsArrayBuffer(file)
+})
+}
+
+/* Zeit */
+const MIDX={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11}
+
+function toMs(d,z){
+const dm=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
+const tm=/(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(z)
+if(!dm||!tm)return NaN
+return Date.UTC(2000+ +dm[3],MIDX[dm[2]],dm[1],tm[1],tm[2],tm[3],tm[4])
+}
+
+const MON={Jan:"01",Feb:"02",Mar:"03",Apr:"04",May:"05",Jun:"06",Jul:"07",Aug:"08",Sep:"09",Oct:"10",Nov:"11",Dec:"12"}
+
+function formatDate(d){
+const m=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
+return m?`${m[1]}.${MON[m[2]]}.20${m[3]}`:d
+}
+
+/* Anlagenname */
+function sanitize(s){
+return s.replace(/_BR_.*/i,"").replace(/GPS-Position.*/i,"").replace(/\s+/g,"_")
+}
+
+/* Parser */
+function parse(text){
+
+const h=/Anlage:\s*([^\n\r<]+)/.exec(text)
+if(h)anlagenName=sanitize(h[1])
+
+const ts=`(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})`
+const re=new RegExp(ts+"\\s+([\\s\\S]*?)(?=\\s*"+ts+"|$)","g")
+
+let out=[],m
+
+while(m=re.exec(text)){
+
+let e=m[3].replace(/<br\s*\/?>/gi," ").replace(/\s+/g," ").trim()
+
+if(e.includes("SIEMENS"))continue
+
+out.push({Datum:m[1],Zeit:m[2],Ereignis:e})
+
+}
+
+return out
+}
+
+/* Kontakte */
+function findKontakte(rows){
+
+const set=new Set()
+
+rows.forEach(r=>{
+
+let m=/TVD:(\d+)/.exec(r.Ereignis)
+if(m)set.add("TVD:"+m[1])
+
+m=/Abschnitt:\s*(\d+)/.exec(r.Ereignis)
+if(m)set.add("ABS:"+m[1])
+
+})
+
+return [...set]
+}
+
+/* Einschaltungen zählen */
+function countStarts(rows){
+return rows.filter(r=>r.Ereignis.includes("Gelb anschalten")).length
+}
+
+/* Regex je Kontakt */
+function getRegex(k){
+
+const [t,id]=k.split(":")
+
+if(t==="TVD")return new RegExp(`TVD:${id}.*Achsen.*(\\d+)`)
+return new RegExp(`Abschnitt:\\s*${id}.*Achsen.*(\\d+)`)
+}
+
+/* Ergebnisse */
+function buildResults(rows,k){
+
+const re=getRegex(k)
+let start=null,res=[]
+
+rows.forEach(r=>{
+
+if(r.Ereignis.includes("Gelb anschalten"))start=r
+
+if(start){
+
+const m=re.exec(r.Ereignis)
+
+if(m){
+
+const diff=(toMs(r.Datum,r.Zeit)-toMs(start.Datum,start.Zeit))/1000
+
+res.push({
+Start:start.Zeit,
+Ende:r.Zeit,
+Kontakt:k.replace(":",""),
+"Dauer Sekunden":+diff.toFixed(3)
+})
+
+start=null
+}
+
+}
+
+})
+
+return res
+}
+
+/* Highlight */
+function highlight(ws,data){
+
+const style={fill:{fgColor:{rgb:"FFF2CC"}}}
+
+data.forEach((r,i)=>{
+if(r["Dauer Sekunden"]>THRESHOLD){
+
+for(let c=0;c<5;c++){
+const cell=XLSX.utils.encode_cell({r:i+1,c})
+if(ws[cell])ws[cell].s=style
+}
+
+}
+})
+
+}
+
+/* Statistik */
+function buildStats(results,rows,k,date){
+
+const starts=countStarts(rows)
+
+const d=results.map(x=>x["Dauer Sekunden"])
+
+const bad=d.filter(x=>x>THRESHOLD).length
+
+return[
+{Kennzahl:"Datum",Wert:date},
+{Kennzahl:"Anlage",Wert:anlagenName},
+{Kennzahl:"Kontakt",Wert:k},
+{Kennzahl:"Einschaltungen gesamt",Wert:starts},
+{Kennzahl:`> ${THRESHOLD}s`,Wert:bad},
+{Kennzahl:`<= ${THRESHOLD}s`,Wert:d.length-bad}
+]
+
+}
+
+/* UI */
+fileInput.onchange=async()=>{
+
+logEl.textContent="Lade...\n"
+
+let all=[]
+
+for(const f of fileInput.files){
+
+const t=await readFileSmart(f)
+fileCache.set(f.name,t)
+
+const r=parse(t)
+all.push(...r)
+
+}
+
+const k=findKontakte(all)
+
+kontaktSelect.innerHTML=""
+
+k.forEach(x=>{
+const o=document.createElement("option")
+o.value=x
+o.textContent=x
+kontaktSelect.appendChild(o)
+})
+
+logEl.textContent+="Kontakte: "+k.join(", ")
+
+}
+
+/* Export */
+buildBtn.onclick=async()=>{
+
+let rows=[]
+
+for(const f of fileInput.files){
+
+const r=parse(fileCache.get(f.name))
+
+if(addFilename.checked)r.forEach(x=>x.Datei=f.name)
+
+rows.push(...r)
+
+}
+
+rows.sort((a,b)=>toMs(a.Datum,a.Zeit)-toMs(b.Datum,b.Zeit))
+
+const k=kontaktSelect.value
+
+const results=buildResults(rows,k)
+
+rows.forEach(r=>r.Datum=formatDate(r.Datum))
+
+const ws1=XLSX.utils.json_to_sheet(rows)
+const ws2=XLSX.utils.json_to_sheet(results)
+
+highlight(ws2,results)
+
+const today=new Date().toISOString().slice(0,10).replace(/-/g,"")
+
+const stats=buildStats(results,rows,k,today)
+const ws3=XLSX.utils.json_to_sheet(stats)
+
+const wb=XLSX.utils.book_new()
+
+XLSX.utils.book_append_sheet(wb,ws1,"Daten")
+XLSX.utils.book_append_sheet(wb,ws2,"Ergebnisse")
+XLSX.utils.book_append_sheet(wb,ws3,"Statistik")
+
+const file=`${today}_${anlagenName}_${k.replace(":","")}.xlsx`
+
+XLSX.writeFile(wb,file)
+
+statusEl.textContent="Fertig"
+
+}
+
 </script>
-
 </body>
 </html>
