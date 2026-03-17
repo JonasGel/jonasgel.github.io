@@ -2,26 +2,24 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SIMIS Analyse</title>
 
 <style>
 body{font-family:system-ui;max-width:900px;margin:auto;padding:30px}
 .card{border:1px solid #ddd;border-radius:12px;padding:20px}
-.row{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
-button{padding:10px 16px;border-radius:10px;border:1px solid #ccc;cursor:pointer}
-pre{background:#f7f7f7;padding:12px;border-radius:8px;max-height:260px;overflow:auto}
-.footer{margin-top:30px;text-align:center;color:#777}
+.row{margin-top:10px}
+button{padding:10px;border-radius:8px}
+pre{background:#f7f7f7;padding:10px}
+.footer{text-align:center;margin-top:20px;color:#777}
 </style>
 </head>
 
 <body>
 
 <h1>SIMIS Analyse</h1>
-<p>Bitte alle für die Auswertung relevanten Dimotools Protokolle auswählen.</p>
+<p>Bitte alle relevanten Dimotools Protokolle auswählen.</p>
 
 <div class="card">
-
 <input id="files" type="file" multiple>
 
 <div class="row">
@@ -29,16 +27,10 @@ pre{background:#f7f7f7;padding:12px;border-radius:8px;max-height:260px;overflow:
 </div>
 
 <div class="row">
-<label><input type="checkbox" id="addFilename" checked> Dateiname-Spalte</label>
-</div>
-
-<div class="row">
 <button id="build">Auswertung erzeugen</button>
-<span id="status"></span>
 </div>
 
 <pre id="log"></pre>
-
 </div>
 
 <div class="footer">Copyright Jonas Gelhaus 2026</div>
@@ -52,60 +44,19 @@ const THRESHOLD=240
 const fileInput=document.getElementById("files")
 const kontaktSelect=document.getElementById("kontaktSelect")
 const logEl=document.getElementById("log")
-const statusEl=document.getElementById("status")
-const buildBtn=document.getElementById("build")
-const addFilename=document.getElementById("addFilename")
 
-let fileCache=new Map()
+let cache=new Map()
 let anlagenName="SIMIS"
 
-/* Encoding */
-function readFileSmart(file){
-return new Promise(res=>{
-const r=new FileReader()
-r.onload=()=>{
-let t=new TextDecoder("utf-8").decode(r.result)
-if(t.includes("Ã")) t=new TextDecoder("windows-1252").decode(r.result)
-res(t)
-}
-r.readAsArrayBuffer(file)
-})
-}
-
-/* Zeit */
-const MIDX={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11}
-
-function toMs(d,z){
-const dm=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
-const tm=/(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(z)
-if(!dm||!tm)return NaN
-return Date.UTC(2000+ +dm[3],MIDX[dm[2]],dm[1],tm[1],tm[2],tm[3],tm[4])
-}
-
-const MON={Jan:"01",Feb:"02",Mar:"03",Apr:"04",May:"05",Jun:"06",Jul:"07",Aug:"08",Sep:"09",Oct:"10",Nov:"11",Dec:"12"}
-
-function formatDate(d){
-const m=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
-return m?`${m[1]}.${MON[m[2]]}.20${m[3]}`:d
-}
-
-/* Anlagenname */
-function sanitize(s){
-return s.replace(/_BR_.*/i,"").replace(/GPS-Position.*/i,"").replace(/\s+/g,"_")
-}
-
 /* Parser */
-function parse(text){
-
-const h=/Anlage:\s*([^\n\r<]+)/.exec(text)
-if(h)anlagenName=sanitize(h[1])
+function parse(t){
 
 const ts=`(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})`
 const re=new RegExp(ts+"\\s+([\\s\\S]*?)(?=\\s*"+ts+"|$)","g")
 
 let out=[],m
 
-while(m=re.exec(text)){
+while(m=re.exec(t)){
 
 let e=m[3].replace(/<br\s*\/?>/gi," ").replace(/\s+/g," ").trim()
 
@@ -118,31 +69,32 @@ out.push({Datum:m[1],Zeit:m[2],Ereignis:e})
 return out
 }
 
-/* Kontakte */
-function findKontakte(rows){
+/* Zeit */
+const M={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11}
 
-const set=new Set()
+function ms(d,z){
+const dm=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
+const tm=/(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(z)
+return Date.UTC(2000+dm[3],M[dm[2]],dm[1],tm[1],tm[2],tm[3],tm[4])
+}
+
+/* Kontakte */
+function find(rows){
+
+const s=new Set()
 
 rows.forEach(r=>{
-
 let m=/TVD:(\d+)/.exec(r.Ereignis)
-if(m)set.add("TVD:"+m[1])
-
+if(m)s.add("TVD:"+m[1])
 m=/Abschnitt:\s*(\d+)/.exec(r.Ereignis)
-if(m)set.add("ABS:"+m[1])
-
+if(m)s.add("ABS:"+m[1])
 })
 
-return [...set]
+return [...s]
 }
 
-/* Einschaltungen zählen */
-function countStarts(rows){
-return rows.filter(r=>r.Ereignis.includes("Gelb anschalten")).length
-}
-
-/* Regex je Kontakt */
-function getRegex(k){
+/* Regex */
+function getRe(k){
 
 const [t,id]=k.split(":")
 
@@ -151,14 +103,27 @@ return new RegExp(`Abschnitt:\\s*${id}.*Achsen.*(\\d+)`)
 }
 
 /* Ergebnisse */
-function buildResults(rows,k){
+function build(rows,k){
 
-const re=getRegex(k)
-let start=null,res=[]
+const re=getRe(k)
+
+let start=null
+let einschaltungen=0
+let res=[]
 
 rows.forEach(r=>{
 
-if(r.Ereignis.includes("Gelb anschalten"))start=r
+if(r.Ereignis.includes("Gelb anschalten")){
+start=r
+einschaltungen=0
+}
+
+/* Einschaltungen zählen */
+if(r.Ereignis.includes("Einschaltung")){
+if(r.Ereignis.includes("HP")||r.Ereignis.includes("FÜ")){
+einschaltungen++
+}
+}
 
 if(start){
 
@@ -166,16 +131,17 @@ const m=re.exec(r.Ereignis)
 
 if(m){
 
-const diff=(toMs(r.Datum,r.Zeit)-toMs(start.Datum,start.Zeit))/1000
+const diff=(ms(r.Datum,r.Zeit)-ms(start.Datum,start.Zeit))/1000
 
 res.push({
 Start:start.Zeit,
 Ende:r.Zeit,
-Kontakt:k.replace(":",""),
-"Dauer Sekunden":+diff.toFixed(3)
+"Dauer Sekunden":+diff.toFixed(3),
+error:einschaltungen>1
 })
 
 start=null
+
 }
 
 }
@@ -185,62 +151,47 @@ start=null
 return res
 }
 
-/* Highlight */
-function highlight(ws,data){
-
-const style={fill:{fgColor:{rgb:"FFF2CC"}}}
+/* Styling */
+function style(ws,data){
 
 data.forEach((r,i)=>{
-if(r["Dauer Sekunden"]>THRESHOLD){
 
-for(let c=0;c<5;c++){
+let style=null
+
+if(r.error){
+style={fill:{fgColor:{rgb:"FF9999"}}} // rot
+}else if(r["Dauer Sekunden"]>THRESHOLD){
+style={fill:{fgColor:{rgb:"FFF2CC"}}} // gelb
+}
+
+if(style){
+for(let c=0;c<4;c++){
 const cell=XLSX.utils.encode_cell({r:i+1,c})
 if(ws[cell])ws[cell].s=style
 }
-
 }
+
 })
-
-}
-
-/* Statistik */
-function buildStats(results,rows,k,date){
-
-const starts=countStarts(rows)
-
-const d=results.map(x=>x["Dauer Sekunden"])
-
-const bad=d.filter(x=>x>THRESHOLD).length
-
-return[
-{Kennzahl:"Datum",Wert:date},
-{Kennzahl:"Anlage",Wert:anlagenName},
-{Kennzahl:"Kontakt",Wert:k},
-{Kennzahl:"Einschaltungen gesamt",Wert:starts},
-{Kennzahl:`> ${THRESHOLD}s`,Wert:bad},
-{Kennzahl:`<= ${THRESHOLD}s`,Wert:d.length-bad}
-]
 
 }
 
 /* UI */
 fileInput.onchange=async()=>{
 
-logEl.textContent="Lade...\n"
-
 let all=[]
+logEl.textContent="Lade...\n"
 
 for(const f of fileInput.files){
 
-const t=await readFileSmart(f)
-fileCache.set(f.name,t)
+const t=await f.text()
+cache.set(f.name,t)
 
 const r=parse(t)
 all.push(...r)
 
 }
 
-const k=findKontakte(all)
+const k=find(all)
 
 kontaktSelect.innerHTML=""
 
@@ -256,49 +207,28 @@ logEl.textContent+="Kontakte: "+k.join(", ")
 }
 
 /* Export */
-buildBtn.onclick=async()=>{
+build.onclick=async()=>{
 
 let rows=[]
 
 for(const f of fileInput.files){
-
-const r=parse(fileCache.get(f.name))
-
-if(addFilename.checked)r.forEach(x=>x.Datei=f.name)
-
-rows.push(...r)
-
+rows.push(...parse(cache.get(f.name)))
 }
 
-rows.sort((a,b)=>toMs(a.Datum,a.Zeit)-toMs(b.Datum,b.Zeit))
+rows.sort((a,b)=>ms(a.Datum,a.Zeit)-ms(b.Datum,b.Zeit))
 
 const k=kontaktSelect.value
 
-const results=buildResults(rows,k)
+const res=build(rows,k)
 
-rows.forEach(r=>r.Datum=formatDate(r.Datum))
+const ws=XLSX.utils.json_to_sheet(res)
 
-const ws1=XLSX.utils.json_to_sheet(rows)
-const ws2=XLSX.utils.json_to_sheet(results)
-
-highlight(ws2,results)
-
-const today=new Date().toISOString().slice(0,10).replace(/-/g,"")
-
-const stats=buildStats(results,rows,k,today)
-const ws3=XLSX.utils.json_to_sheet(stats)
+style(ws,res)
 
 const wb=XLSX.utils.book_new()
+XLSX.utils.book_append_sheet(wb,ws,"Ergebnisse")
 
-XLSX.utils.book_append_sheet(wb,ws1,"Daten")
-XLSX.utils.book_append_sheet(wb,ws2,"Ergebnisse")
-XLSX.utils.book_append_sheet(wb,ws3,"Statistik")
-
-const file=`${today}_${anlagenName}_${k.replace(":","")}.xlsx`
-
-XLSX.writeFile(wb,file)
-
-statusEl.textContent="Fertig"
+XLSX.writeFile(wb,"simis.xlsx")
 
 }
 
