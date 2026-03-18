@@ -6,46 +6,12 @@
 <title>SIMIS Analyse</title>
 
 <style>
-  body{
-    font-family:system-ui,Segoe UI,Roboto,sans-serif;
-    max-width:900px;
-    margin:auto;
-    padding:30px;
-  }
-  .card{
-    border:1px solid #ddd;
-    border-radius:12px;
-    padding:20px;
-  }
-  .row{
-    display:flex;
-    gap:12px;
-    flex-wrap:wrap;
-    align-items:center;
-    margin-top:12px;
-  }
-  button{
-    padding:10px 16px;
-    border-radius:10px;
-    border:1px solid #ccc;
-    background:white;
-    cursor:pointer;
-  }
-  button:disabled{ opacity:.5; cursor:not-allowed; }
-  pre{
-    background:#f7f7f7;
-    padding:12px;
-    border-radius:8px;
-    max-height:260px;
-    overflow:auto;
-    white-space:pre-wrap;
-  }
-  .footer{
-    margin-top:30px;
-    font-size:13px;
-    color:#777;
-    text-align:center;
-  }
+  body{font-family:system-ui;max-width:900px;margin:auto;padding:30px}
+  .card{border:1px solid #ddd;border-radius:12px;padding:20px}
+  .row{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}
+  button{padding:10px;border-radius:8px}
+  pre{background:#f7f7f7;padding:10px;border-radius:8px}
+  .footer{text-align:center;margin-top:20px;color:#777}
 </style>
 </head>
 
@@ -55,24 +21,17 @@
 <p>Bitte alle für die Auswertung relevanten Dimotools Protokolle auswählen.</p>
 
 <div class="card">
-  <div class="row">
-    <input id="files" type="file" multiple accept=".html,.htm">
-  </div>
+<input id="files" type="file" multiple>
+<div class="row">
+<label><input type="checkbox" id="addFilename" checked> Dateiname-Spalte hinzufügen</label>
+</div>
+<div class="row">
+<button id="build" disabled>Auswertung erzeugen</button>
+<span id="status"></span>
+</div>
 
-  <div class="row">
-    <label>
-      <input type="checkbox" id="addFilename" checked>
-      Dateiname-Spalte hinzufügen
-    </label>
-  </div>
-
-  <div class="row">
-    <button id="build" disabled>Auswertung erzeugen</button>
-    <span id="status"></span>
-  </div>
-
-  <h3>Log</h3>
-  <pre id="log"></pre>
+<h3>Log</h3>
+<pre id="log"></pre>
 </div>
 
 <div class="footer">Copyright Jonas Gelhaus 2026</div>
@@ -80,330 +39,181 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
 <script>
-  const fileInput = document.getElementById("files");
-  const buildBtn = document.getElementById("build");
-  const logEl = document.getElementById("log");
-  const statusEl = document.getElementById("status");
-  const addFilename = document.getElementById("addFilename");
+const fileInput=document.getElementById("files")
+const buildBtn=document.getElementById("build")
+const logEl=document.getElementById("log")
+const statusEl=document.getElementById("status")
+const addFilename=document.getElementById("addFilename")
 
-  let selectedFiles = [];
-  const fileCache = new Map();
-  let anlagenName = "SIMIS";
+let selectedFiles=[]
+const cache=new Map()
+let anlagenName="SIMIS"
 
-  const THRESHOLD_SECONDS = 240;
-  const START_SIGNAL = "031/05 HP-Schnittstelle 1: Einschaltung";
-  const END_SIGNAL = "001/02 Ausschaltabschnitt 1: Befahren";
-  const BUE_SIGNAL = "023/01 FÜ-Schnittstelle meldet 'BÜ Eingeschaltet'";
+const THRESHOLD=240
+const START="031/05 HP-Schnittstelle 1: Einschaltung"
+const END="001/02 Ausschaltabschnitt 1: Befahren"
+const BUE="023/01 FÜ-Schnittstelle meldet 'BÜ Eingeschaltet'"
 
-  function readFileSmart(file){
-    return new Promise((resolve,reject)=>{
-      const r = new FileReader();
-      r.onload = ()=>{
-        const buf = r.result;
-        const utf8 = new TextDecoder("utf-8").decode(buf);
-        if (utf8.includes("Ã") || utf8.includes("�")) {
-          resolve(new TextDecoder("windows-1252").decode(buf));
-        } else {
-          resolve(utf8);
-        }
-      };
-      r.onerror = ()=>reject(r.error);
-      r.readAsArrayBuffer(file);
-    });
-  }
+function read(file){
+return new Promise((res,rej)=>{
+const r=new FileReader()
+r.onload=()=>{
+const buf=r.result
+const t=new TextDecoder("utf-8").decode(buf)
+if(t.includes("Ã")) res(new TextDecoder("windows-1252").decode(buf))
+else res(t)
+}
+r.onerror=()=>rej(r.error)
+r.readAsArrayBuffer(file)
+})
+}
 
-  const MONTHIDX = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
-  function toMs(d,z){
-    const dm = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d);
-    const tm = /(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(z);
-    if(!dm || !tm) return NaN;
-    return Date.UTC(
-      2000 + Number(dm[3]),
-      MONTHIDX[dm[2]],
-      Number(dm[1]),
-      Number(tm[1]),
-      Number(tm[2]),
-      Number(tm[3]),
-      Number(tm[4])
-    );
-  }
+const M={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11}
 
-  const MONTH = {Jan:"01",Feb:"02",Mar:"03",Apr:"04",May:"05",Jun:"06",Jul:"07",Aug:"08",Sep:"09",Oct:"10",Nov:"11",Dec:"12"};
-  function formatDate(d){
-    const m = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d);
-    if(!m) return d;
-    return `${m[1]}.${MONTH[m[2]]}.20${m[3]}`;
-  }
+function ms(d,z){
+const dm=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
+const tm=/(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(z)
+if(!dm||!tm)return NaN
+return Date.UTC(2000+dm[3],M[dm[2]],dm[1],tm[1],tm[2],tm[3],tm[4])
+}
 
-  function sanitizeAnlageName(raw){
-    let name = (raw || "").trim();
-    name = name.replace(/_BR_.*/i, "");
-    name = name.replace(/GPS-Position.*/i, "");
-    name = name.replace(/<[^>]*>/g, "");
-    name = name.replace(/\s+/g, "_");
-    name = name.replace(/[^\w\-,.]/g, "");
-    name = name.replace(/_+/g, "_").replace(/^_+|_+$/g, "");
-    return name || "SIMIS";
-  }
+function fmt(d){
+const m=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
+const mm={Jan:"01",Feb:"02",Mar:"03",Apr:"04",May:"05",Jun:"06",Jul:"07",Aug:"08",Sep:"09",Oct:"10",Nov:"11",Dec:"12"}
+return `${m[1]}.${mm[m[2]]}.20${m[3]}`
+}
 
-  function isCopyrightLine(s){
-    const t = (s || "").toLowerCase();
-    return t.includes("copyright") && t.includes("all rights reserved");
-  }
+function parse(t,f){
 
-  function parseLog(text, filename){
-    const header = /Anlage:\s*([^\n\r<]+)/.exec(text);
-    if(header){
-      anlagenName = sanitizeAnlageName(header[1]);
-    }
+const header=/Anlage:\s*([^\n\r<]+)/.exec(t)
+if(header) anlagenName=header[1].replace(/_BR_.*/,"").replace(/GPS.*/,"").trim()
 
-    const ts = `(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})`;
-    const re = new RegExp(ts + "\\s+([\\s\\S]*?)(?=\\s*" + ts + "|\\s*$)", "g");
+const re=new RegExp("(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\s+([\\s\\S]*?)(?=\\s*\\d{2}\\.|$)","g")
 
-    const rows = [];
-    let m;
+let out=[],m
+while(m=re.exec(t)){
 
-    while ((m = re.exec(text)) !== null) {
-      let ereignis = (m[3] || "")
-        .replace(/<br\s*\/?>/gi," ")
-        .replace(/\s*\n\s*/g," ")
-        .replace(/\s{2,}/g," ")
-        .trim();
+let e=m[3].replace(/<br.*?>/gi," ").replace(/\s+/g," ").trim()
+if(e.includes("SIEMENS"))continue
 
-      if (!ereignis) continue;
-      if (ereignis.includes("SIEMENS AG - Transportation Systems")) continue;
-      if (isCopyrightLine(ereignis)) continue;
+out.push({Datum:m[1],Zeit:m[2],Ereignis:e,Datei:f})
 
-      rows.push({
-        Datum: m[1],
-        Zeit: m[2],
-        Ereignis: ereignis,
-        Datei: filename || ""
-      });
-    }
+}
+return out
+}
 
-    return rows;
-  }
+function buildResults(rows){
 
-  function countHpStarts(rows){
-    return rows.filter(r => (r.Ereignis || "").includes(START_SIGNAL)).length;
-  }
+let start=null
+let res=[]
 
-  function countBueStarts(rows){
-    return rows.filter(r => {
-      const e = r.Ereignis || "";
-      return e.includes(START_SIGNAL) || e.includes(BUE_SIGNAL);
-    }).length;
-  }
+rows.forEach(r=>{
 
-  function addSeconds(rows){
-    let startMs = null;
+const t=ms(r.Datum,r.Zeit)
+if(!Number.isFinite(t))return
 
-    rows.forEach(r=>{
-      r["Sekunden (Start→Ausschaltung)"] = "";
-      const ms = toMs(r.Datum, r.Zeit);
-      if (!Number.isFinite(ms)) return;
+if(r.Ereignis.includes(START)){
+start=r
+return
+}
 
-      if ((r.Ereignis || "").includes(START_SIGNAL)) {
-        startMs = ms;
-        return;
-      }
+if(start && r.Ereignis.includes(END)){
 
-      if (startMs !== null && (r.Ereignis || "").includes(END_SIGNAL)) {
-        r["Sekunden (Start→Ausschaltung)"] = Number(((ms - startMs)/1000).toFixed(3));
-        startMs = null;
-      }
-    });
-  }
+const diff=(t-ms(start.Datum,start.Zeit))/1000
 
-  function buildResults(rows){
-    let startRow = null;
-    const res = [];
+res.push({
+"Startsignal":`${fmt(start.Datum)} ${start.Zeit}`,
+"Ausschaltung":`${fmt(r.Datum)} ${r.Zeit}`,
+"Dauer Sekunden":+diff.toFixed(3),
+"Datei":r.Datei||""
+})
 
-    rows.forEach(r=>{
-      const ms = toMs(r.Datum, r.Zeit);
-      if (!Number.isFinite(ms)) return;
+start=null
+}
 
-      if ((r.Ereignis || "").includes(START_SIGNAL)) {
-        startRow = r;
-        return;
-      }
+})
 
-      if (startRow && (r.Ereignis || "").includes(END_SIGNAL)) {
-        const diff = (ms - toMs(startRow.Datum, startRow.Zeit)) / 1000;
+return res
+}
 
-        res.push({
-          "Startsignal": `${formatDate(startRow.Datum)} ${startRow.Zeit}`,
-          "Ausschaltung": `${formatDate(r.Datum)} ${r.Zeit}`,
-          "Datei Ausschaltung": r.Datei || "",
-          "Endsignal": END_SIGNAL,
-          "Dauer Sekunden": Number(diff.toFixed(3))
-        });
+function stats(results,rows,date){
 
-        startRow = null;
-      }
-    });
+const hp=rows.filter(r=>r.Ereignis.includes(START)).length
+const total=rows.filter(r=>r.Ereignis.includes(START)||r.Ereignis.includes(BUE)).length
 
-    return res;
-  }
+const d=results.map(x=>x["Dauer Sekunden"])
+const bad=d.filter(x=>x>THRESHOLD).length
+const good=d.length-bad
 
-  function buildStats(results, rows, dateStr, anlage){
-    const stats = [];
+const avg=d.reduce((a,b)=>a+b,0)/d.length
+const min=Math.min(...d)
+const max=Math.max(...d)
 
-    const hpStarts = countHpStarts(rows);
-    const bueStarts = countBueStarts(rows);
+return [
+{Kennzahl:"Datum",Wert:date},
+{Kennzahl:"Anlage",Wert:anlagenName},
+{Kennzahl:"Startsignal",Wert:START},
+{Kennzahl:"Endsignal",Wert:END},
+{Kennzahl:"Schwellwert",Wert:THRESHOLD},
+{Kennzahl:"Einschaltungen Gesamt",Wert:total},
+{Kennzahl:"Einschaltungen HP-Schnittstelle",Wert:hp},
+{Kennzahl:">240 sec",Wert:bad},
+{Kennzahl:"<=240 sec",Wert:good},
+{Kennzahl:"Mittelwert",Wert:+avg.toFixed(3)},
+{Kennzahl:"Minimum",Wert:+min.toFixed(3)},
+{Kennzahl:"Maximum",Wert:+max.toFixed(3)}
+]
 
-    stats.push({ Kennzahl: "Datum", Wert: dateStr });
-    stats.push({ Kennzahl: "Anlage", Wert: anlage });
-    stats.push({ Kennzahl: "Startsignal", Wert: START_SIGNAL });
-    stats.push({ Kennzahl: "Endsignal", Wert: END_SIGNAL });
-    stats.push({ Kennzahl: "Schwellwert (s)", Wert: THRESHOLD_SECONDS });
-    stats.push({ Kennzahl: "Einschaltungen Gesamt", Wert: bueStarts });
-    stats.push({ Kennzahl: "Einschaltungen HP-Schnittstelle", Wert: hpStarts });
+}
 
-    if (!results.length) {
-      stats.push({ Kennzahl: `> ${THRESHOLD_SECONDS} sec`, Wert: 0 });
-      stats.push({ Kennzahl: `<= ${THRESHOLD_SECONDS} sec`, Wert: 0 });
-      stats.push({ Kennzahl: "Mittelwert", Wert: 0 });
-      stats.push({ Kennzahl: "Minimum", Wert: 0 });
-      stats.push({ Kennzahl: "Maximum", Wert: 0 });
-      return stats;
-    }
+fileInput.onchange=async()=>{
 
-    const durs = results.map(r => r["Dauer Sekunden"]).filter(v => Number.isFinite(v));
-    const n = durs.length;
+selectedFiles=[...fileInput.files]
+cache.clear()
+logEl.textContent=""
 
-    const sum = durs.reduce((a,b)=>a+b,0);
-    const avg = sum / n;
-    const min = Math.min(...durs);
-    const max = Math.max(...durs);
+for(const f of selectedFiles){
+const t=await read(f)
+cache.set(f.name,t)
+const r=parse(t,f.name)
+logEl.textContent+=`✓ ${f.name} (${r.length})\n`
+}
 
-    const bad = durs.filter(v => v > THRESHOLD_SECONDS).length;
-    const good = n - bad;
+buildBtn.disabled=false
+}
 
-    stats.push({ Kennzahl: `> ${THRESHOLD_SECONDS} sec`, Wert: bad });
-    stats.push({ Kennzahl: `<= ${THRESHOLD_SECONDS} sec`, Wert: good });
-    stats.push({ Kennzahl: "Mittelwert", Wert: Number(avg.toFixed(3)) });
-    stats.push({ Kennzahl: "Minimum", Wert: Number(min.toFixed(3)) });
-    stats.push({ Kennzahl: "Maximum", Wert: Number(max.toFixed(3)) });
+buildBtn.onclick=async()=>{
 
-    return stats;
-  }
+let rows=[]
+for(const f of selectedFiles){
+rows.push(...parse(cache.get(f.name),f.name))
+}
 
-  function highlightBadRows(ws, results, thresholdSeconds){
-    const range = XLSX.utils.decode_range(ws["!ref"] || "A1:A1");
-    const styleYellow = {
-      fill: { patternType: "solid", fgColor: { rgb: "FFF2CC" } }
-    };
+rows.sort((a,b)=>ms(a.Datum,a.Zeit)-ms(b.Datum,b.Zeit))
 
-    for (let i = 0; i < results.length; i++){
-      const dur = results[i]["Dauer Sekunden"];
-      if (!Number.isFinite(dur) || dur <= thresholdSeconds) continue;
+const results=buildResults(rows)
 
-      const rowNumber = 2 + i;
-      for (let c = range.s.c; c <= range.e.c; c++){
-        const addr = XLSX.utils.encode_cell({ r: rowNumber - 1, c });
-        if (!ws[addr]) ws[addr] = { t: "s", v: "" };
-        ws[addr].s = styleYellow;
-      }
-    }
-  }
+const ws2=XLSX.utils.json_to_sheet(results)
 
-  fileInput.addEventListener("change", async () => {
-    selectedFiles = [...fileInput.files];
-    fileCache.clear();
-    logEl.textContent = "";
-    statusEl.textContent = "";
-    buildBtn.disabled = true;
+results.forEach((r,i)=>{
+if(r["Dauer Sekunden"]>THRESHOLD){
+for(let c=0;c<4;c++){
+const cell=XLSX.utils.encode_cell({r:i+1,c})
+if(ws2[cell]) ws2[cell].s={fill:{fgColor:{rgb:"FFF2CC"}}}
+}
+}
+})
 
-    if (!selectedFiles.length) return;
+const date=new Date().toISOString().slice(0,10).replace(/-/g,"")
+const ws3=XLSX.utils.json_to_sheet(stats(results,rows,date))
 
-    logEl.textContent = "Dateien werden analysiert...\n";
+const wb=XLSX.utils.book_new()
+XLSX.utils.book_append_sheet(wb,ws2,"Ergebnisse")
+XLSX.utils.book_append_sheet(wb,ws3,"Statistik")
 
-    try {
-      for (const f of selectedFiles) {
-        const html = await readFileSmart(f);
-        fileCache.set(f.name, html);
-        const rows = parseLog(html, f.name);
-        logEl.textContent += `✓ ${f.name}: ${rows.length} Zeilen\n`;
-      }
+XLSX.writeFile(wb,`${date}_${anlagenName}.xlsx`)
+}
 
-      buildBtn.disabled = false;
-      statusEl.textContent = "Bereit.";
-      logEl.textContent += `\nStartsignal: ${START_SIGNAL}\n`;
-      logEl.textContent += `Endsignal: ${END_SIGNAL}\n`;
-
-    } catch (e) {
-      console.error(e);
-      statusEl.textContent = "Fehler beim Einlesen (Konsole).";
-      logEl.textContent += `\nFehler: ${e?.message || e}\n`;
-      buildBtn.disabled = true;
-    }
-  });
-
-  buildBtn.addEventListener("click", async () => {
-    if (!selectedFiles.length) return;
-
-    logEl.textContent += "\nAuswertung läuft...\n";
-    statusEl.textContent = "Erzeuge Excel...";
-
-    try {
-      let rows = [];
-
-      for (const f of selectedFiles) {
-        const html = fileCache.get(f.name) ?? await readFileSmart(f);
-        const r = parseLog(html, f.name);
-
-        if (!addFilename.checked) {
-          r.forEach(x => delete x.Datei);
-        }
-
-        rows.push(...r);
-      }
-
-      rows.sort((a,b)=>toMs(a.Datum,a.Zeit) - toMs(b.Datum,b.Zeit));
-
-      addSeconds(rows);
-      const results = buildResults(rows);
-
-      rows.forEach(r => { r.Datum = formatDate(r.Datum); });
-
-      const ws1 = XLSX.utils.json_to_sheet(rows);
-      const ws2 = XLSX.utils.json_to_sheet(results);
-
-      const cols1 = [];
-      if (addFilename.checked) cols1.push({ wch: 30 });
-      cols1.push({ wch: 12 }, { wch: 14 }, { wch: 110 }, { wch: 26 });
-      ws1["!cols"] = cols1;
-      ws2["!cols"] = [{ wch: 22 }, { wch: 22 }, { wch: 30 }, { wch: 40 }, { wch: 16 }];
-
-      highlightBadRows(ws2, results, THRESHOLD_SECONDS);
-
-      const today = new Date();
-      const dateStr = today.toISOString().slice(0,10).replace(/-/g,"");
-      const statsRows = buildStats(results, rows, dateStr, anlagenName);
-      const ws3 = XLSX.utils.json_to_sheet(statsRows);
-      ws3["!cols"] = [{ wch: 30 }, { wch: 60 }];
-
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws1, "Daten");
-      XLSX.utils.book_append_sheet(wb, ws2, "Ergebnisse");
-      XLSX.utils.book_append_sheet(wb, ws3, "Statistik");
-
-      const outName = `${dateStr}_${anlagenName}_Ausschaltabschnitt1.xlsx`;
-
-      XLSX.writeFile(wb, outName);
-
-      statusEl.textContent = "Auswertung erzeugt.";
-      logEl.textContent += `✓ Excel erstellt: ${outName}\n`;
-
-    } catch (e) {
-      console.error(e);
-      statusEl.textContent = "Fehler beim Export (Konsole).";
-      logEl.textContent += `\nFehler: ${e?.message || e}\n`;
-    }
-  });
 </script>
-
 </body>
 </html>
