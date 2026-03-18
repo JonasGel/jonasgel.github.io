@@ -95,7 +95,6 @@
   const END_SIGNAL = "001/02 Ausschaltabschnitt 1: Befahren";
   const BUE_SIGNAL = "023/01 FÜ-Schnittstelle meldet 'BÜ Eingeschaltet'";
 
-  // ---------- Encoding ----------
   function readFileSmart(file){
     return new Promise((resolve,reject)=>{
       const r = new FileReader();
@@ -113,7 +112,6 @@
     });
   }
 
-  // ---------- Zeitberechnung ----------
   const MONTHIDX = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
   function toMs(d,z){
     const dm = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d);
@@ -130,7 +128,6 @@
     );
   }
 
-  // ---------- Datum formatieren ----------
   const MONTH = {Jan:"01",Feb:"02",Mar:"03",Apr:"04",May:"05",Jun:"06",Jul:"07",Aug:"08",Sep:"09",Oct:"10",Nov:"11",Dec:"12"};
   function formatDate(d){
     const m = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d);
@@ -138,14 +135,6 @@
     return `${m[1]}.${MONTH[m[2]]}.20${m[3]}`;
   }
 
-  // ---------- Prozent formatieren ----------
-  function formatPercent(part, whole){
-    if (!whole || whole <= 0) return "0,00 %";
-    const val = (part / whole) * 100;
-    return `${val.toFixed(2).replace(".", ",")} %`;
-  }
-
-  // ---------- Anlagenname säubern ----------
   function sanitizeAnlageName(raw){
     let name = (raw || "").trim();
     name = name.replace(/_BR_.*/i, "");
@@ -162,8 +151,7 @@
     return t.includes("copyright") && t.includes("all rights reserved");
   }
 
-  // ---------- Parser ----------
-  function parseLog(text){
+  function parseLog(text, filename){
     const header = /Anlage:\s*([^\n\r<]+)/.exec(text);
     if(header){
       anlagenName = sanitizeAnlageName(header[1]);
@@ -186,13 +174,17 @@
       if (ereignis.includes("SIEMENS AG - Transportation Systems")) continue;
       if (isCopyrightLine(ereignis)) continue;
 
-      rows.push({ Datum: m[1], Zeit: m[2], Ereignis: ereignis });
+      rows.push({
+        Datum: m[1],
+        Zeit: m[2],
+        Ereignis: ereignis,
+        Datei: filename || ""
+      });
     }
 
     return rows;
   }
 
-  // ---------- Zählungen ----------
   function countHpStarts(rows){
     return rows.filter(r => (r.Ereignis || "").includes(START_SIGNAL)).length;
   }
@@ -204,7 +196,6 @@
     }).length;
   }
 
-  // ---------- Sekunden-Spalte ----------
   function addSeconds(rows){
     let startMs = null;
 
@@ -225,7 +216,6 @@
     });
   }
 
-  // ---------- Ergebnisblatt ----------
   function buildResults(rows){
     let startRow = null;
     const res = [];
@@ -245,6 +235,7 @@
         res.push({
           "Startsignal": `${formatDate(startRow.Datum)} ${startRow.Zeit}`,
           "Ausschaltung": `${formatDate(r.Datum)} ${r.Zeit}`,
+          "Datei Ausschaltung": r.Datei || "",
           "Endsignal": END_SIGNAL,
           "Dauer Sekunden": Number(diff.toFixed(3))
         });
@@ -256,26 +247,26 @@
     return res;
   }
 
-  // ---------- Statistik ----------
   function buildStats(results, rows, dateStr, anlage){
     const stats = [];
 
     const hpStarts = countHpStarts(rows);
     const bueStarts = countBueStarts(rows);
 
-    stats.push({ Kennzahl: "Datum (Auswertung)", Wert: dateStr });
+    stats.push({ Kennzahl: "Datum", Wert: dateStr });
     stats.push({ Kennzahl: "Anlage", Wert: anlage });
     stats.push({ Kennzahl: "Startsignal", Wert: START_SIGNAL });
     stats.push({ Kennzahl: "Endsignal", Wert: END_SIGNAL });
     stats.push({ Kennzahl: "Schwellwert (s)", Wert: THRESHOLD_SECONDS });
-    stats.push({ Kennzahl: "Einschaltungen HP gesamt", Wert: hpStarts });
-    stats.push({ Kennzahl: "Einschaltungen BÜ gesamt", Wert: bueStarts });
+    stats.push({ Kennzahl: "Einschaltungen Gesamt", Wert: bueStarts });
+    stats.push({ Kennzahl: "Einschaltungen HP-Schnittstelle", Wert: hpStarts });
 
     if (!results.length) {
-      stats.push({ Kennzahl: `> ${THRESHOLD_SECONDS}s`, Wert: 0 });
-      stats.push({ Kennzahl: `≤ ${THRESHOLD_SECONDS}s`, Wert: 0 });
-      stats.push({ Kennzahl: `% > ${THRESHOLD_SECONDS}s von allen Schließungen`, Wert: "0,00 %" });
-      stats.push({ Kennzahl: `% > ${THRESHOLD_SECONDS}s von HP-Einschaltungen`, Wert: "0,00 %" });
+      stats.push({ Kennzahl: `> ${THRESHOLD_SECONDS} sec`, Wert: 0 });
+      stats.push({ Kennzahl: `<= ${THRESHOLD_SECONDS} sec`, Wert: 0 });
+      stats.push({ Kennzahl: "Mittelwert", Wert: 0 });
+      stats.push({ Kennzahl: "Minimum", Wert: 0 });
+      stats.push({ Kennzahl: "Maximum", Wert: 0 });
       return stats;
     }
 
@@ -287,28 +278,18 @@
     const min = Math.min(...durs);
     const max = Math.max(...durs);
 
-    const sorted = [...durs].sort((a,b)=>a-b);
-    const median = (n % 2 === 1)
-      ? sorted[(n-1)/2]
-      : (sorted[n/2 - 1] + sorted[n/2]) / 2;
-
     const bad = durs.filter(v => v > THRESHOLD_SECONDS).length;
     const good = n - bad;
 
-    stats.push({ Kennzahl: `> ${THRESHOLD_SECONDS}s`, Wert: bad });
-    stats.push({ Kennzahl: `≤ ${THRESHOLD_SECONDS}s`, Wert: good });
-    stats.push({ Kennzahl: `% > ${THRESHOLD_SECONDS}s von allen Schließungen`, Wert: formatPercent(bad, n) });
-    stats.push({ Kennzahl: `% > ${THRESHOLD_SECONDS}s von HP-Einschaltungen`, Wert: formatPercent(bad, hpStarts) });
-
-    stats.push({ Kennzahl: "Mittelwert (s)", Wert: Number(avg.toFixed(3)) });
-    stats.push({ Kennzahl: "Median (s)", Wert: Number(median.toFixed(3)) });
-    stats.push({ Kennzahl: "Minimum (s)", Wert: Number(min.toFixed(3)) });
-    stats.push({ Kennzahl: "Maximum (s)", Wert: Number(max.toFixed(3)) });
+    stats.push({ Kennzahl: `> ${THRESHOLD_SECONDS} sec`, Wert: bad });
+    stats.push({ Kennzahl: `<= ${THRESHOLD_SECONDS} sec`, Wert: good });
+    stats.push({ Kennzahl: "Mittelwert", Wert: Number(avg.toFixed(3)) });
+    stats.push({ Kennzahl: "Minimum", Wert: Number(min.toFixed(3)) });
+    stats.push({ Kennzahl: "Maximum", Wert: Number(max.toFixed(3)) });
 
     return stats;
   }
 
-  // ---------- Styling ----------
   function highlightBadRows(ws, results, thresholdSeconds){
     const range = XLSX.utils.decode_range(ws["!ref"] || "A1:A1");
     const styleYellow = {
@@ -328,7 +309,6 @@
     }
   }
 
-  // ---------- UI ----------
   fileInput.addEventListener("change", async () => {
     selectedFiles = [...fileInput.files];
     fileCache.clear();
@@ -344,7 +324,7 @@
       for (const f of selectedFiles) {
         const html = await readFileSmart(f);
         fileCache.set(f.name, html);
-        const rows = parseLog(html);
+        const rows = parseLog(html, f.name);
         logEl.textContent += `✓ ${f.name}: ${rows.length} Zeilen\n`;
       }
 
@@ -361,7 +341,6 @@
     }
   });
 
-  // ---------- Export ----------
   buildBtn.addEventListener("click", async () => {
     if (!selectedFiles.length) return;
 
@@ -373,9 +352,12 @@
 
       for (const f of selectedFiles) {
         const html = fileCache.get(f.name) ?? await readFileSmart(f);
-        const r = parseLog(html);
+        const r = parseLog(html, f.name);
 
-        if (addFilename.checked) r.forEach(x => x.Datei = f.name);
+        if (!addFilename.checked) {
+          r.forEach(x => delete x.Datei);
+        }
+
         rows.push(...r);
       }
 
@@ -393,7 +375,7 @@
       if (addFilename.checked) cols1.push({ wch: 30 });
       cols1.push({ wch: 12 }, { wch: 14 }, { wch: 110 }, { wch: 26 });
       ws1["!cols"] = cols1;
-      ws2["!cols"] = [{ wch: 22 }, { wch: 22 }, { wch: 40 }, { wch: 16 }];
+      ws2["!cols"] = [{ wch: 22 }, { wch: 22 }, { wch: 30 }, { wch: 40 }, { wch: 16 }];
 
       highlightBadRows(ws2, results, THRESHOLD_SECONDS);
 
@@ -401,7 +383,7 @@
       const dateStr = today.toISOString().slice(0,10).replace(/-/g,"");
       const statsRows = buildStats(results, rows, dateStr, anlagenName);
       const ws3 = XLSX.utils.json_to_sheet(statsRows);
-      ws3["!cols"] = [{ wch: 42 }, { wch: 60 }];
+      ws3["!cols"] = [{ wch: 30 }, { wch: 60 }];
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws1, "Daten");
