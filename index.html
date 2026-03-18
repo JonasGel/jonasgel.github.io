@@ -93,8 +93,9 @@
   const THRESHOLD_SECONDS = 240;
   const START_SIGNAL = "031/05 HP-Schnittstelle 1: Einschaltung";
   const END_SIGNAL = "001/02 Ausschaltabschnitt 1: Befahren";
+  const BUE_SIGNAL = "023/01 FÜ-Schnittstelle meldet 'BÜ Eingeschaltet'";
 
-  // ---------- Encoding (UTF-8 -> windows-1252 fallback) ----------
+  // ---------- Encoding ----------
   function readFileSmart(file){
     return new Promise((resolve,reject)=>{
       const r = new FileReader();
@@ -135,6 +136,13 @@
     const m = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d);
     if(!m) return d;
     return `${m[1]}.${MONTH[m[2]]}.20${m[3]}`;
+  }
+
+  // ---------- Prozent formatieren ----------
+  function formatPercent(part, whole){
+    if (!whole || whole <= 0) return "0,00 %";
+    const val = (part / whole) * 100;
+    return `${val.toFixed(2).replace(".", ",")} %`;
   }
 
   // ---------- Anlagenname säubern ----------
@@ -184,12 +192,19 @@
     return rows;
   }
 
-  // ---------- Einschaltungen zählen ----------
-  function countStarts(rows){
+  // ---------- Zählungen ----------
+  function countHpStarts(rows){
     return rows.filter(r => (r.Ereignis || "").includes(START_SIGNAL)).length;
   }
 
-  // ---------- Sekunden-Spalte (auf Endsignal-Zeile) ----------
+  function countBueStarts(rows){
+    return rows.filter(r => {
+      const e = r.Ereignis || "";
+      return e.includes(START_SIGNAL) || e.includes(BUE_SIGNAL);
+    }).length;
+  }
+
+  // ---------- Sekunden-Spalte ----------
   function addSeconds(rows){
     let startMs = null;
 
@@ -244,18 +259,23 @@
   // ---------- Statistik ----------
   function buildStats(results, rows, dateStr, anlage){
     const stats = [];
-    const starts = countStarts(rows);
+
+    const hpStarts = countHpStarts(rows);
+    const bueStarts = countBueStarts(rows);
 
     stats.push({ Kennzahl: "Datum (Auswertung)", Wert: dateStr });
     stats.push({ Kennzahl: "Anlage", Wert: anlage });
     stats.push({ Kennzahl: "Startsignal", Wert: START_SIGNAL });
     stats.push({ Kennzahl: "Endsignal", Wert: END_SIGNAL });
     stats.push({ Kennzahl: "Schwellwert (s)", Wert: THRESHOLD_SECONDS });
-    stats.push({ Kennzahl: "Einschaltungen gesamt", Wert: starts });
+    stats.push({ Kennzahl: "Einschaltungen HP gesamt", Wert: hpStarts });
+    stats.push({ Kennzahl: "Einschaltungen BÜ gesamt", Wert: bueStarts });
 
     if (!results.length) {
       stats.push({ Kennzahl: `> ${THRESHOLD_SECONDS}s`, Wert: 0 });
       stats.push({ Kennzahl: `≤ ${THRESHOLD_SECONDS}s`, Wert: 0 });
+      stats.push({ Kennzahl: `% > ${THRESHOLD_SECONDS}s von allen Schließungen`, Wert: "0,00 %" });
+      stats.push({ Kennzahl: `% > ${THRESHOLD_SECONDS}s von HP-Einschaltungen`, Wert: "0,00 %" });
       return stats;
     }
 
@@ -272,19 +292,18 @@
       ? sorted[(n-1)/2]
       : (sorted[n/2 - 1] + sorted[n/2]) / 2;
 
-    const variance = durs.reduce((acc,v)=>acc + Math.pow(v-avg,2), 0) / n;
-    const std = Math.sqrt(variance);
-
     const bad = durs.filter(v => v > THRESHOLD_SECONDS).length;
     const good = n - bad;
 
     stats.push({ Kennzahl: `> ${THRESHOLD_SECONDS}s`, Wert: bad });
     stats.push({ Kennzahl: `≤ ${THRESHOLD_SECONDS}s`, Wert: good });
+    stats.push({ Kennzahl: `% > ${THRESHOLD_SECONDS}s von allen Schließungen`, Wert: formatPercent(bad, n) });
+    stats.push({ Kennzahl: `% > ${THRESHOLD_SECONDS}s von HP-Einschaltungen`, Wert: formatPercent(bad, hpStarts) });
+
     stats.push({ Kennzahl: "Mittelwert (s)", Wert: Number(avg.toFixed(3)) });
     stats.push({ Kennzahl: "Median (s)", Wert: Number(median.toFixed(3)) });
     stats.push({ Kennzahl: "Minimum (s)", Wert: Number(min.toFixed(3)) });
     stats.push({ Kennzahl: "Maximum (s)", Wert: Number(max.toFixed(3)) });
-    stats.push({ Kennzahl: "Std-Abw (s)", Wert: Number(std.toFixed(3)) });
 
     return stats;
   }
@@ -382,7 +401,7 @@
       const dateStr = today.toISOString().slice(0,10).replace(/-/g,"");
       const statsRows = buildStats(results, rows, dateStr, anlagenName);
       const ws3 = XLSX.utils.json_to_sheet(statsRows);
-      ws3["!cols"] = [{ wch: 30 }, { wch: 60 }];
+      ws3["!cols"] = [{ wch: 42 }, { wch: 60 }];
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws1, "Daten");
