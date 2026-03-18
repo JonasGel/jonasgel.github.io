@@ -76,11 +76,7 @@ function setStatus(msg){
 
 function decodeBuffer(buf){
   const utf8 = new TextDecoder("utf-8", { fatal:false }).decode(buf)
-
-  // einfache Mojibake-Erkennung
-  const suspicious =
-    (utf8.match(/Ã|â€|â€“|â€œ|â€ž|ï¿½|�/g) || []).length
-
+  const suspicious = (utf8.match(/Ã|â€|â€“|â€œ|â€ž|ï¿½|�/g) || []).length
   if(suspicious >= 2){
     return new TextDecoder("windows-1252").decode(buf)
   }
@@ -283,7 +279,7 @@ function autoWidth(ws, data){
   data.forEach(row => {
     headers.forEach((h, i) => {
       const len = String(row[h] ?? "").length + 2
-      if(len > widths[i].wch) widths[i].wch = Math.min(len, 45)
+      if(len > widths[i].wch) widths[i].wch = Math.min(len, 80)
     })
   })
 
@@ -357,6 +353,20 @@ buildBtn.onclick = async () => {
 
     rows.sort((a,b) => toMillis(a.Datum, a.Zeit) - toMillis(b.Datum, b.Zeit))
 
+    const rawRows = rows.length ? rows.map(r => ({
+      "Datum": fmtDate(r.Datum),
+      "Zeit": r.Zeit,
+      "Ereignis": r.Ereignis,
+      "Datei": r.Datei,
+      "Anlage": r.Anlage
+    })) : [{
+      "Datum": "",
+      "Zeit": "",
+      "Ereignis": "",
+      "Datei": "",
+      "Anlage": ""
+    }]
+
     const anlage = [...anlagenSet][0] || "SIMIS"
     const { results, offeneStarts } = buildResults(rows)
 
@@ -374,9 +384,11 @@ buildBtn.onclick = async () => {
 
     const statRows = buildStats(results, rows, exportDate, anlage)
 
+    const wsRaw = XLSX.utils.json_to_sheet(rawRows)
     const wsResults = XLSX.utils.json_to_sheet(resultRows)
     const wsStats = XLSX.utils.json_to_sheet(statRows)
 
+    styleHeader(wsRaw, Object.keys(rawRows[0]))
     styleHeader(wsResults, Object.keys(resultRows[0]))
     styleHeader(wsStats, Object.keys(statRows[0]))
 
@@ -396,10 +408,12 @@ buildBtn.onclick = async () => {
       })
     }
 
+    autoWidth(wsRaw, rawRows)
     autoWidth(wsResults, resultRows)
     autoWidth(wsStats, statRows)
 
     const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, wsRaw, "Rohdaten")
     XLSX.utils.book_append_sheet(wb, wsResults, "Ergebnisse")
     XLSX.utils.book_append_sheet(wb, wsStats, "Statistik")
 
