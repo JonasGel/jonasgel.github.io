@@ -232,7 +232,7 @@ function buildResults(rows){
   return { results, offeneStarts: openStarts }
 }
 
-function buildStats(results, rows, auswertungsDatum, anlage){
+function buildStatsForAnlage(results, rows, auswertungsDatum, anlage){
   const hpCount = rows.filter(r => r.Ereignis.includes(START)).length
   const totalCount = rows.filter(r =>
     r.Ereignis.includes(START) || r.Ereignis.includes(BUE)
@@ -254,7 +254,7 @@ function buildStats(results, rows, auswertungsDatum, anlage){
     ? Number(Math.max(...durations).toFixed(3))
     : ""
 
-  return [{
+  return {
     "Datum": auswertungsDatum,
     "Anlage": anlage,
     "Startsignal": START,
@@ -267,7 +267,33 @@ function buildStats(results, rows, auswertungsDatum, anlage){
     "Mittelwert": avg,
     "Minimum": min,
     "Maximum": max
-  }]
+  }
+}
+
+function buildStatsSheetRows(statsByAnlage){
+  const labels = [
+    "Datum",
+    "Anlage",
+    "Startsignal",
+    "Endsignal",
+    "Schwellwert (240s)",
+    "Einschaltungen Gesamt (HP + FÜ)",
+    "Einschaltungen HP-Schnittstelle",
+    "> 240 sec",
+    "<=240 sec",
+    "Mittelwert",
+    "Minimum",
+    "Maximum"
+  ]
+
+  return labels.map(label => {
+    const row = { "Kennzahl": label }
+    statsByAnlage.forEach((stats, index) => {
+      const colName = stats["Anlage"] || `Anlage ${index + 1}`
+      row[colName] = stats[label]
+    })
+    return row
+  })
 }
 
 function autoWidth(ws, data){
@@ -382,7 +408,18 @@ buildBtn.onclick = async () => {
         : { "Startsignal":"", "Ausschaltung":"", "Dauer Sekunden":"" }
     ]
 
-    const statRows = buildStats(results, rows, exportDate, anlage)
+    const uniqueAnlagen = [...new Set(rows.map(r => r.Anlage).filter(Boolean))]
+
+    const statsByAnlage = uniqueAnlagen.length
+      ? uniqueAnlagen.map(anl => {
+          const rowsForAnlage = rows.filter(r => r.Anlage === anl)
+          const rowsForAnlageSorted = [...rowsForAnlage].sort((a,b) => toMillis(a.Datum, a.Zeit) - toMillis(b.Datum, b.Zeit))
+          const resultsForAnlage = buildResults(rowsForAnlageSorted).results
+          return buildStatsForAnlage(resultsForAnlage, rowsForAnlageSorted, exportDate, anl)
+        })
+      : [buildStatsForAnlage([], [], exportDate, "SIMIS")]
+
+    const statRows = buildStatsSheetRows(statsByAnlage)
 
     const wsRaw = XLSX.utils.json_to_sheet(rawRows)
     const wsResults = XLSX.utils.json_to_sheet(resultRows)
