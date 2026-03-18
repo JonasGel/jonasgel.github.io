@@ -60,11 +60,6 @@
   </div>
 
   <div class="row">
-    <label>Erkannte Kontakte:</label>
-    <select id="kontaktSelect" disabled></select>
-  </div>
-
-  <div class="row">
     <label>
       <input type="checkbox" id="addFilename" checked>
       Dateiname-Spalte hinzufügen
@@ -82,13 +77,11 @@
 
 <div class="footer">Copyright Jonas Gelhaus 2026</div>
 
-<!-- Wichtig: xlsx-js-style statt xlsx, damit Styles (gelb) in Excel funktionieren -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
 <script>
   const fileInput = document.getElementById("files");
   const buildBtn = document.getElementById("build");
-  const kontaktSelect = document.getElementById("kontaktSelect");
   const logEl = document.getElementById("log");
   const statusEl = document.getElementById("status");
   const addFilename = document.getElementById("addFilename");
@@ -98,6 +91,8 @@
   let anlagenName = "SIMIS";
 
   const THRESHOLD_SECONDS = 240;
+  const START_SIGNAL = "031/05 HP-Schnittstelle 1: Einschaltung";
+  const END_SIGNAL = "001/02 Ausschaltabschnitt 1: Befahren";
 
   // ---------- Encoding (UTF-8 -> windows-1252 fallback) ----------
   function readFileSmart(file){
@@ -117,7 +112,7 @@
     });
   }
 
-  // ---------- Zeitberechnung (Originalformat: 01.Jan.26) ----------
+  // ---------- Zeitberechnung ----------
   const MONTHIDX = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
   function toMs(d,z){
     const dm = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d);
@@ -134,7 +129,7 @@
     );
   }
 
-  // ---------- Datum formatieren für Excel (DD.MM.YYYY) ----------
+  // ---------- Datum formatieren ----------
   const MONTH = {Jan:"01",Feb:"02",Mar:"03",Apr:"04",May:"05",Jun:"06",Jul:"07",Aug:"08",Sep:"09",Oct:"10",Nov:"11",Dec:"12"};
   function formatDate(d){
     const m = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d);
@@ -154,7 +149,6 @@
     return name || "SIMIS";
   }
 
-  // ---------- Footer/Abschlusszeilen ignorieren ----------
   function isCopyrightLine(s){
     const t = (s || "").toLowerCase();
     return t.includes("copyright") && t.includes("all rights reserved");
@@ -190,74 +184,34 @@
     return rows;
   }
 
-  // ---------- Kontakte finden (TVD + Abschnitt) ----------
-  function findKontakte(rows){
-    const set = new Set();
-
-    const tvdRe = /ECAC:\s*\(TVD:(\d+)\)\s*Achsen im Abschnitt:\s*\d+/;
-    const absRe = /\(Abschnitt:\s*(\d+)\)\s*\d+\/\d+\s+Achsen im Abschnitt:\s*\d+/;
-
-    for (const r of rows) {
-      const e = r.Ereignis || "";
-      let m = tvdRe.exec(e);
-      if (m) set.add(`TVD:${m[1]}`);
-      m = absRe.exec(e);
-      if (m) set.add(`ABS:${m[1]}`);
-    }
-
-    return Array.from(set).sort((a,b)=>{
-      const [ta,na] = a.split(":");
-      const [tb,nb] = b.split(":");
-      if (ta !== tb) return ta.localeCompare(tb);
-      return Number(na) - Number(nb);
-    });
+  // ---------- Einschaltungen zählen ----------
+  function countStarts(rows){
+    return rows.filter(r => (r.Ereignis || "").includes(START_SIGNAL)).length;
   }
 
-  function kontaktLabelToToken(label){
-    return label.replace(":", "");
-  }
-
-  function makeAchsenRegex(kontaktLabel){
-    const [typ, id] = kontaktLabel.split(":");
-
-    if (typ === "TVD") {
-      return new RegExp(String.raw`ECAC:\s*\(TVD:${id}\)\s*Achsen im Abschnitt:\s*(\d+)`);
-    }
-    return new RegExp(String.raw`\(\s*Abschnitt:\s*${id}\s*\)\s*\d+\/\d+\s+Achsen im Abschnitt:\s*(\d+)`);
-  }
-
-  // ---------- Sekunden-Spalte (auf Achsenzeile) ----------
-  function addSeconds(rows, kontaktLabel){
-    const startNeedle = "Lichtgruppe 1: Gelb anschalten";
-    const achsenRe = makeAchsenRegex(kontaktLabel);
-
+  // ---------- Sekunden-Spalte (auf Endsignal-Zeile) ----------
+  function addSeconds(rows){
     let startMs = null;
 
     rows.forEach(r=>{
-      r["Sekunden (Gelb→Achsen)"] = "";
+      r["Sekunden (Start→Ausschaltung)"] = "";
       const ms = toMs(r.Datum, r.Zeit);
       if (!Number.isFinite(ms)) return;
 
-      if ((r.Ereignis || "").includes(startNeedle)) {
+      if ((r.Ereignis || "").includes(START_SIGNAL)) {
         startMs = ms;
         return;
       }
 
-      if (startMs !== null) {
-        const m = achsenRe.exec(r.Ereignis || "");
-        if (m) {
-          r["Sekunden (Gelb→Achsen)"] = Number(((ms - startMs)/1000).toFixed(3));
-          startMs = null;
-        }
+      if (startMs !== null && (r.Ereignis || "").includes(END_SIGNAL)) {
+        r["Sekunden (Start→Ausschaltung)"] = Number(((ms - startMs)/1000).toFixed(3));
+        startMs = null;
       }
     });
   }
 
-  // ---------- Ergebnisblatt (Zyklen) ----------
-  function buildResults(rows, kontaktLabel){
-    const startNeedle = "Lichtgruppe 1: Gelb anschalten";
-    const achsenRe = makeAchsenRegex(kontaktLabel);
-
+  // ---------- Ergebnisblatt ----------
+  function buildResults(rows){
     let startRow = null;
     const res = [];
 
@@ -265,44 +219,43 @@
       const ms = toMs(r.Datum, r.Zeit);
       if (!Number.isFinite(ms)) return;
 
-      if ((r.Ereignis || "").includes(startNeedle)) {
+      if ((r.Ereignis || "").includes(START_SIGNAL)) {
         startRow = r;
         return;
       }
 
-      if (startRow) {
-        const m = achsenRe.exec(r.Ereignis || "");
-        if (m) {
-          const diff = (ms - toMs(startRow.Datum, startRow.Zeit)) / 1000;
+      if (startRow && (r.Ereignis || "").includes(END_SIGNAL)) {
+        const diff = (ms - toMs(startRow.Datum, startRow.Zeit)) / 1000;
 
-          res.push({
-            "Start Gelb": `${formatDate(startRow.Datum)} ${startRow.Zeit}`,
-            "Achsenzeit": `${formatDate(r.Datum)} ${r.Zeit}`,
-            "Kontakt": kontaktLabel.replace(":", ""),
-            "Achsenwert": Number(m[1]),
-            "Dauer Sekunden": Number(diff.toFixed(3))
-          });
+        res.push({
+          "Startsignal": `${formatDate(startRow.Datum)} ${startRow.Zeit}`,
+          "Ausschaltung": `${formatDate(r.Datum)} ${r.Zeit}`,
+          "Endsignal": END_SIGNAL,
+          "Dauer Sekunden": Number(diff.toFixed(3))
+        });
 
-          startRow = null;
-        }
+        startRow = null;
       }
     });
 
     return res;
   }
 
-  // ---------- Statistik-Sheet (inkl. > 240s Auswertung) ----------
-  function buildStats(results, kontaktLabel, dateStr, anlage){
+  // ---------- Statistik ----------
+  function buildStats(results, rows, dateStr, anlage){
     const stats = [];
+    const starts = countStarts(rows);
+
     stats.push({ Kennzahl: "Datum (Auswertung)", Wert: dateStr });
     stats.push({ Kennzahl: "Anlage", Wert: anlage });
-    stats.push({ Kennzahl: "Kontakt", Wert: kontaktLabel.replace(":", "") });
+    stats.push({ Kennzahl: "Startsignal", Wert: START_SIGNAL });
+    stats.push({ Kennzahl: "Endsignal", Wert: END_SIGNAL });
     stats.push({ Kennzahl: "Schwellwert (s)", Wert: THRESHOLD_SECONDS });
+    stats.push({ Kennzahl: "Einschaltungen gesamt", Wert: starts });
 
     if (!results.length) {
-      stats.push({ Kennzahl: "Anzahl Zyklen", Wert: 0 });
-      stats.push({ Kennzahl: `Anzahl > ${THRESHOLD_SECONDS}s (schlecht)`, Wert: 0 });
-      stats.push({ Kennzahl: `Anzahl ≤ ${THRESHOLD_SECONDS}s (gut)`, Wert: 0 });
+      stats.push({ Kennzahl: `> ${THRESHOLD_SECONDS}s`, Wert: 0 });
+      stats.push({ Kennzahl: `≤ ${THRESHOLD_SECONDS}s`, Wert: 0 });
       return stats;
     }
 
@@ -325,10 +278,8 @@
     const bad = durs.filter(v => v > THRESHOLD_SECONDS).length;
     const good = n - bad;
 
-    stats.push({ Kennzahl: "Anzahl Zyklen", Wert: n });
-    stats.push({ Kennzahl: `Anzahl > ${THRESHOLD_SECONDS}s (schlecht)`, Wert: bad });
-    stats.push({ Kennzahl: `Anzahl ≤ ${THRESHOLD_SECONDS}s (gut)`, Wert: good });
-
+    stats.push({ Kennzahl: `> ${THRESHOLD_SECONDS}s`, Wert: bad });
+    stats.push({ Kennzahl: `≤ ${THRESHOLD_SECONDS}s`, Wert: good });
     stats.push({ Kennzahl: "Mittelwert (s)", Wert: Number(avg.toFixed(3)) });
     stats.push({ Kennzahl: "Median (s)", Wert: Number(median.toFixed(3)) });
     stats.push({ Kennzahl: "Minimum (s)", Wert: Number(min.toFixed(3)) });
@@ -338,74 +289,50 @@
     return stats;
   }
 
-  // ---------- Styling: Zeilen > Threshold gelb markieren ----------
+  // ---------- Styling ----------
   function highlightBadRows(ws, results, thresholdSeconds){
-    // Ergebnisse-Sheet ist aus json_to_sheet erstellt:
-    // Header in Zeile 1, Daten ab Zeile 2
     const range = XLSX.utils.decode_range(ws["!ref"] || "A1:A1");
     const styleYellow = {
-      fill: { patternType: "solid", fgColor: { rgb: "FFF2CC" } } // hellgelb
+      fill: { patternType: "solid", fgColor: { rgb: "FFF2CC" } }
     };
 
     for (let i = 0; i < results.length; i++){
       const dur = results[i]["Dauer Sekunden"];
       if (!Number.isFinite(dur) || dur <= thresholdSeconds) continue;
 
-      const rowNumber = 2 + i; // Excel-Zeile (1=Header)
+      const rowNumber = 2 + i;
       for (let c = range.s.c; c <= range.e.c; c++){
-        const addr = XLSX.utils.encode_cell({ r: rowNumber - 1, c }); // r ist 0-based
+        const addr = XLSX.utils.encode_cell({ r: rowNumber - 1, c });
         if (!ws[addr]) ws[addr] = { t: "s", v: "" };
         ws[addr].s = styleYellow;
       }
     }
   }
 
-  // ---------- UI: Dateien auswählen -> analysieren & Dropdown ----------
+  // ---------- UI ----------
   fileInput.addEventListener("change", async () => {
     selectedFiles = [...fileInput.files];
     fileCache.clear();
     logEl.textContent = "";
     statusEl.textContent = "";
     buildBtn.disabled = true;
-    kontaktSelect.innerHTML = "";
-    kontaktSelect.disabled = true;
 
     if (!selectedFiles.length) return;
 
     logEl.textContent = "Dateien werden analysiert...\n";
-    let allRows = [];
 
     try {
       for (const f of selectedFiles) {
         const html = await readFileSmart(f);
         fileCache.set(f.name, html);
         const rows = parseLog(html);
-        allRows.push(...rows);
         logEl.textContent += `✓ ${f.name}: ${rows.length} Zeilen\n`;
-      }
-
-      const kontakte = findKontakte(allRows);
-
-      if (kontakte.length) {
-        kontakte.forEach(v=>{
-          const o=document.createElement("option");
-          o.value=v;
-          o.textContent=v;
-          kontaktSelect.appendChild(o);
-        });
-        kontaktSelect.disabled = false;
-        logEl.textContent += `\nKontakte erkannt: ${kontakte.join(", ")}\n`;
-      } else {
-        const o=document.createElement("option");
-        o.value="";
-        o.textContent="(keine Kontakte gefunden)";
-        kontaktSelect.appendChild(o);
-        kontaktSelect.disabled=true;
-        logEl.textContent += "\nKeine Kontakte gefunden.\n";
       }
 
       buildBtn.disabled = false;
       statusEl.textContent = "Bereit.";
+      logEl.textContent += `\nStartsignal: ${START_SIGNAL}\n`;
+      logEl.textContent += `Endsignal: ${END_SIGNAL}\n`;
 
     } catch (e) {
       console.error(e);
@@ -418,12 +345,6 @@
   // ---------- Export ----------
   buildBtn.addEventListener("click", async () => {
     if (!selectedFiles.length) return;
-
-    const kontaktLabel = kontaktSelect.disabled ? "" : kontaktSelect.value;
-    if (!kontaktLabel) {
-      statusEl.textContent = "Kein Kontakt ausgewählt/gefunden.";
-      return;
-    }
 
     logEl.textContent += "\nAuswertung läuft...\n";
     statusEl.textContent = "Erzeuge Excel...";
@@ -441,41 +362,34 @@
 
       rows.sort((a,b)=>toMs(a.Datum,a.Zeit) - toMs(b.Datum,b.Zeit));
 
-      addSeconds(rows, kontaktLabel);
-      const results = buildResults(rows, kontaktLabel);
+      addSeconds(rows);
+      const results = buildResults(rows);
 
-      // Datum fürs Rohdatenblatt umformatieren
       rows.forEach(r => { r.Datum = formatDate(r.Datum); });
 
       const ws1 = XLSX.utils.json_to_sheet(rows);
       const ws2 = XLSX.utils.json_to_sheet(results);
 
-      // Spaltenbreiten
       const cols1 = [];
       if (addFilename.checked) cols1.push({ wch: 30 });
-      cols1.push({ wch: 12 }, { wch: 14 }, { wch: 110 }, { wch: 22 });
+      cols1.push({ wch: 12 }, { wch: 14 }, { wch: 110 }, { wch: 26 });
       ws1["!cols"] = cols1;
-      ws2["!cols"] = [{ wch: 22 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 16 }];
+      ws2["!cols"] = [{ wch: 22 }, { wch: 22 }, { wch: 40 }, { wch: 16 }];
 
-      // Ergebnisse: Zeilen > 240s gelb markieren
       highlightBadRows(ws2, results, THRESHOLD_SECONDS);
 
-      // Statistik-Sheet
       const today = new Date();
-      const dateStr = today.toISOString().slice(0,10).replace(/-/g,""); // YYYYMMDD
-      const statsRows = buildStats(results, kontaktLabel, dateStr, anlagenName);
+      const dateStr = today.toISOString().slice(0,10).replace(/-/g,"");
+      const statsRows = buildStats(results, rows, dateStr, anlagenName);
       const ws3 = XLSX.utils.json_to_sheet(statsRows);
-      ws3["!cols"] = [{ wch: 30 }, { wch: 40 }];
+      ws3["!cols"] = [{ wch: 30 }, { wch: 60 }];
 
-      // Workbook
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws1, "Daten");
       XLSX.utils.book_append_sheet(wb, ws2, "Ergebnisse");
       XLSX.utils.book_append_sheet(wb, ws3, "Statistik");
 
-      // Dateiname: Datum vorne, dann Anlage, dann Kontakt ohne :
-      const token = kontaktLabelToToken(kontaktLabel); // TVD201 oder ABS205
-      const outName = `${dateStr}_${anlagenName}_${token}.xlsx`;
+      const outName = `${dateStr}_${anlagenName}_Ausschaltabschnitt1.xlsx`;
 
       XLSX.writeFile(wb, outName);
 
