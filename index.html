@@ -6,32 +6,35 @@
 <title>SIMIS Analyse</title>
 
 <style>
-  body{font-family:system-ui;max-width:900px;margin:auto;padding:30px}
+  body{font-family:system-ui;max-width:980px;margin:auto;padding:30px}
   .card{border:1px solid #ddd;border-radius:12px;padding:20px}
-  .row{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}
-  button{padding:10px;border-radius:8px}
-  pre{background:#f7f7f7;padding:10px;border-radius:8px}
+  .row{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;align-items:center}
+  button{padding:10px 14px;border-radius:8px;cursor:pointer}
+  pre{background:#f7f7f7;padding:10px;border-radius:8px;white-space:pre-wrap}
   .footer{text-align:center;margin-top:20px;color:#777}
+  .muted{color:#666;font-size:.95rem}
 </style>
 </head>
 
 <body>
 
 <h1>SIMIS Analyse</h1>
-<p>Bitte alle für die Auswertung relevanten Dimotools Protokolle auswählen.</p>
+<p>Bitte alle für die Auswertung relevanten Dimotools-Protokolle auswählen.</p>
 
 <div class="card">
-<input id="files" type="file" multiple>
-<div class="row">
-<label><input type="checkbox" id="addFilename" checked> Dateiname-Spalte hinzufügen</label>
-</div>
-<div class="row">
-<button id="build" disabled>Auswertung erzeugen</button>
-<span id="status"></span>
-</div>
+  <input id="files" type="file" multiple accept=".html,.htm">
 
-<h3>Log</h3>
-<pre id="log"></pre>
+  <div class="row">
+    <label><input type="checkbox" id="addFilename" checked> Dateiname-Spalte hinzufügen</label>
+  </div>
+
+  <div class="row">
+    <button id="build" disabled>Auswertung erzeugen</button>
+    <span id="status" class="muted"></span>
+  </div>
+
+  <h3>Log</h3>
+  <pre id="log"></pre>
 </div>
 
 <div class="footer">Copyright Jonas Gelhaus 2026</div>
@@ -39,181 +42,385 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
 <script>
-const fileInput=document.getElementById("files")
-const buildBtn=document.getElementById("build")
-const logEl=document.getElementById("log")
-const statusEl=document.getElementById("status")
-const addFilename=document.getElementById("addFilename")
+const fileInput = document.getElementById("files")
+const buildBtn = document.getElementById("build")
+const logEl = document.getElementById("log")
+const statusEl = document.getElementById("status")
+const addFilename = document.getElementById("addFilename")
 
-let selectedFiles=[]
-const cache=new Map()
-let anlagenName="SIMIS"
+let selectedFiles = []
+const cache = new Map()
 
-const THRESHOLD=240
-const START="031/05 HP-Schnittstelle 1: Einschaltung"
-const END="001/02 Ausschaltabschnitt 1: Befahren"
-const BUE="023/01 FÜ-Schnittstelle meldet 'BÜ Eingeschaltet'"
+const THRESHOLD = 240
+const START = "031/05 HP-Schnittstelle 1: Einschaltung"
+const END = "001/02 Ausschaltabschnitt 1: Befahren"
+const BUE = "023/01 FÜ-Schnittstelle meldet 'BÜ Eingeschaltet'"
+
+const MONTHS = {
+  Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5,
+  Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11
+}
+
+const MONTHS_NUM = {
+  Jan:"01", Feb:"02", Mar:"03", Apr:"04", May:"05", Jun:"06",
+  Jul:"07", Aug:"08", Sep:"09", Oct:"10", Nov:"11", Dec:"12"
+}
+
+function log(msg){
+  logEl.textContent += msg + "\n"
+}
+
+function setStatus(msg){
+  statusEl.textContent = msg
+}
+
+function decodeBuffer(buf){
+  const utf8 = new TextDecoder("utf-8", { fatal:false }).decode(buf)
+
+  // einfache Mojibake-Erkennung
+  const suspicious =
+    (utf8.match(/Ã|â€|â€“|â€œ|â€ž|ï¿½|�/g) || []).length
+
+  if(suspicious >= 2){
+    return new TextDecoder("windows-1252").decode(buf)
+  }
+  return utf8
+}
 
 function read(file){
-return new Promise((res,rej)=>{
-const r=new FileReader()
-r.onload=()=>{
-const buf=r.result
-const t=new TextDecoder("utf-8").decode(buf)
-if(t.includes("Ã")) res(new TextDecoder("windows-1252").decode(buf))
-else res(t)
-}
-r.onerror=()=>rej(r.error)
-r.readAsArrayBuffer(file)
-})
-}
-
-const M={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11}
-
-function ms(d,z){
-const dm=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
-const tm=/(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(z)
-if(!dm||!tm)return NaN
-return Date.UTC(2000+dm[3],M[dm[2]],dm[1],tm[1],tm[2],tm[3],tm[4])
+  return new Promise((resolve, reject)=>{
+    const r = new FileReader()
+    r.onload = ()=> {
+      try{
+        resolve(decodeBuffer(r.result))
+      }catch(err){
+        reject(err)
+      }
+    }
+    r.onerror = ()=> reject(r.error)
+    r.readAsArrayBuffer(file)
+  })
 }
 
-function fmt(d){
-const m=/(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(d)
-const mm={Jan:"01",Feb:"02",Mar:"03",Apr:"04",May:"05",Jun:"06",Jul:"07",Aug:"08",Sep:"09",Oct:"10",Nov:"11",Dec:"12"}
-return `${m[1]}.${mm[m[2]]}.20${m[3]}`
+function cleanAnlagenName(raw){
+  if(!raw) return "SIMIS"
+  return raw
+    .replace(/GPS.*/i, "")
+    .replace(/_BR_.*/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
-function parse(t,f){
-
-const header=/Anlage:\s*([^\n\r<]+)/.exec(t)
-if(header) anlagenName=header[1].replace(/_BR_.*/,"").replace(/GPS.*/,"").trim()
-
-const re=new RegExp("(\\d{2}\\.[A-Za-z]{3}\\.\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\s+([\\s\\S]*?)(?=\\s*\\d{2}\\.|$)","g")
-
-let out=[],m
-while(m=re.exec(t)){
-
-let e=m[3].replace(/<br.*?>/gi," ").replace(/\s+/g," ").trim()
-if(e.includes("SIEMENS"))continue
-
-out.push({Datum:m[1],Zeit:m[2],Ereignis:e,Datei:f})
-
+function sanitizeFileName(name){
+  return (name || "SIMIS")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, "_")
 }
-return out
+
+function toMillis(datum, zeit){
+  const dm = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(datum)
+  const tm = /(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(zeit)
+
+  if(!dm || !tm) return NaN
+  const year = 2000 + Number(dm[3])
+  const month = MONTHS[dm[2]]
+  if(month === undefined) return NaN
+
+  return Date.UTC(
+    year,
+    month,
+    Number(dm[1]),
+    Number(tm[1]),
+    Number(tm[2]),
+    Number(tm[3]),
+    Number(tm[4])
+  )
+}
+
+function fmtDate(datum){
+  const m = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(datum)
+  if(!m) return datum
+  return `${m[1]}.${MONTHS_NUM[m[2]] || "??"}.20${m[3]}`
+}
+
+function fmtDateTime(datum, zeit){
+  return `${fmtDate(datum)} ${zeit}`
+}
+
+function normalizeHtmlText(text){
+  return text
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<div[^>]*>/gi, " ")
+    .replace(/<\/?center[^>]*>/gi, " ")
+    .replace(/<\/?font[^>]*>/gi, " ")
+    .replace(/<\/?b[^>]*>/gi, " ")
+    .replace(/<\/?td[^>]*>/gi, " ")
+    .replace(/<\/?tr[^>]*>/gi, " ")
+    .replace(/<\/?table[^>]*>/gi, " ")
+    .replace(/<\/?head[^>]*>/gi, " ")
+    .replace(/<\/?body[^>]*>/gi, " ")
+    .replace(/<\/?html[^>]*>/gi, " ")
+    .replace(/<\/?style[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<img[^>]*>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+}
+
+function extractAnlage(text){
+  const m = /Anlage:\s*([^\n\r<]+)/i.exec(text)
+  return cleanAnlagenName(m ? m[1] : "SIMIS")
+}
+
+function parse(text, filename){
+  const anlage = extractAnlage(text)
+  const cleaned = normalizeHtmlText(text)
+
+  const re = /(\d{2}\.[A-Za-z]{3}\.\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+([\s\S]*?)(?=(?:\s*\d{2}\.[A-Za-z]{3}\.\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}\s+)|$)/g
+
+  const rows = []
+  let m
+
+  while((m = re.exec(cleaned)) !== null){
+    let ereignis = m[3]
+      .replace(/\u0000/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+
+    if(!ereignis) continue
+    if(/SIEMENS AG/i.test(ereignis)) continue
+    if(/Transportation Systems\. Copyright/i.test(ereignis)) continue
+
+    rows.push({
+      Datum: m[1],
+      Zeit: m[2],
+      Ereignis: ereignis,
+      Datei: filename,
+      Anlage: anlage
+    })
+  }
+
+  return rows
 }
 
 function buildResults(rows){
+  const openStarts = []
+  const results = []
 
-let start=null
-let res=[]
+  for(const row of rows){
+    const currentMs = toMillis(row.Datum, row.Zeit)
+    if(!Number.isFinite(currentMs)) continue
 
-rows.forEach(r=>{
+    if(row.Ereignis.includes(START)){
+      openStarts.push(row)
+      continue
+    }
 
-const t=ms(r.Datum,r.Zeit)
-if(!Number.isFinite(t))return
+    if(row.Ereignis.includes(END) && openStarts.length){
+      const start = openStarts.shift()
+      const diff = (currentMs - toMillis(start.Datum, start.Zeit)) / 1000
 
-if(r.Ereignis.includes(START)){
-start=r
-return
+      const item = {
+        "Startsignal": fmtDateTime(start.Datum, start.Zeit),
+        "Ausschaltung": fmtDateTime(row.Datum, row.Zeit),
+        "Dauer Sekunden": Number(diff.toFixed(3))
+      }
+
+      if(addFilename.checked){
+        item["Datei"] = row.Datei || ""
+      }
+
+      results.push(item)
+    }
+  }
+
+  return { results, offeneStarts: openStarts }
 }
 
-if(start && r.Ereignis.includes(END)){
+function buildStats(results, rows, auswertungsDatum, anlage){
+  const hpCount = rows.filter(r => r.Ereignis.includes(START)).length
+  const totalCount = rows.filter(r =>
+    r.Ereignis.includes(START) || r.Ereignis.includes(BUE)
+  ).length
 
-const diff=(t-ms(start.Datum,start.Zeit))/1000
+  const durations = results.map(r => r["Dauer Sekunden"])
+  const over = durations.filter(v => v > THRESHOLD).length
+  const underOrEqual = durations.filter(v => v <= THRESHOLD).length
 
-res.push({
-"Startsignal":`${fmt(start.Datum)} ${start.Zeit}`,
-"Ausschaltung":`${fmt(r.Datum)} ${r.Zeit}`,
-"Dauer Sekunden":+diff.toFixed(3),
-"Datei":r.Datei||""
-})
+  const avg = durations.length
+    ? Number((durations.reduce((a,b)=>a+b,0) / durations.length).toFixed(3))
+    : ""
 
-start=null
+  const min = durations.length
+    ? Number(Math.min(...durations).toFixed(3))
+    : ""
+
+  const max = durations.length
+    ? Number(Math.max(...durations).toFixed(3))
+    : ""
+
+  return [{
+    "Datum": auswertungsDatum,
+    "Anlage": anlage,
+    "Startsignal": START,
+    "Endsignal": END,
+    "Schwellwert (240s)": THRESHOLD,
+    "Einschaltungen Gesamt (HP + FÜ)": totalCount,
+    "Einschaltungen HP-Schnittstelle": hpCount,
+    "> 240 sec": over,
+    "<=240 sec": underOrEqual,
+    "Mittelwert": avg,
+    "Minimum": min,
+    "Maximum": max
+  }]
 }
 
-})
+function autoWidth(ws, data){
+  if(!data || !data.length) return
 
-return res
+  const headers = Object.keys(data[0])
+  const widths = headers.map(h => ({ wch: Math.max(12, String(h).length + 2) }))
+
+  data.forEach(row => {
+    headers.forEach((h, i) => {
+      const len = String(row[h] ?? "").length + 2
+      if(len > widths[i].wch) widths[i].wch = Math.min(len, 45)
+    })
+  })
+
+  ws["!cols"] = widths
 }
 
-function stats(results,rows,date){
-
-const hp=rows.filter(r=>r.Ereignis.includes(START)).length
-const total=rows.filter(r=>r.Ereignis.includes(START)||r.Ereignis.includes(BUE)).length
-
-const d=results.map(x=>x["Dauer Sekunden"])
-const bad=d.filter(x=>x>THRESHOLD).length
-const good=d.length-bad
-
-const avg=d.reduce((a,b)=>a+b,0)/d.length
-const min=Math.min(...d)
-const max=Math.max(...d)
-
-return [
-{Kennzahl:"Datum",Wert:date},
-{Kennzahl:"Anlage",Wert:anlagenName},
-{Kennzahl:"Startsignal",Wert:START},
-{Kennzahl:"Endsignal",Wert:END},
-{Kennzahl:"Schwellwert",Wert:THRESHOLD},
-{Kennzahl:"Einschaltungen Gesamt",Wert:total},
-{Kennzahl:"Einschaltungen HP-Schnittstelle",Wert:hp},
-{Kennzahl:">240 sec",Wert:bad},
-{Kennzahl:"<=240 sec",Wert:good},
-{Kennzahl:"Mittelwert",Wert:+avg.toFixed(3)},
-{Kennzahl:"Minimum",Wert:+min.toFixed(3)},
-{Kennzahl:"Maximum",Wert:+max.toFixed(3)}
-]
-
+function styleHeader(ws, headers){
+  headers.forEach((_, c) => {
+    const cell = XLSX.utils.encode_cell({ r:0, c })
+    if(ws[cell]){
+      ws[cell].s = {
+        font: { bold:true },
+        fill: { fgColor:{ rgb:"D9EAF7" } },
+        alignment: { horizontal:"center", vertical:"center" }
+      }
+    }
+  })
 }
 
-fileInput.onchange=async()=>{
+fileInput.onchange = async () => {
+  selectedFiles = [...fileInput.files]
+  cache.clear()
+  logEl.textContent = ""
+  buildBtn.disabled = true
 
-selectedFiles=[...fileInput.files]
-cache.clear()
-logEl.textContent=""
+  if(!selectedFiles.length){
+    setStatus("")
+    return
+  }
 
-for(const f of selectedFiles){
-const t=await read(f)
-cache.set(f.name,t)
-const r=parse(t,f.name)
-logEl.textContent+=`✓ ${f.name} (${r.length})\n`
+  setStatus("Dateien werden eingelesen ...")
+
+  try{
+    for(const f of selectedFiles){
+      const text = await read(f)
+      cache.set(f.name, text)
+
+      const parsed = parse(text, f.name)
+      const anlage = parsed[0]?.Anlage || extractAnlage(text)
+
+      log(`✓ ${f.name} (${parsed.length} Ereignisse) – Anlage: ${anlage}`)
+    }
+
+    buildBtn.disabled = false
+    setStatus(`${selectedFiles.length} Datei(en) bereit`)
+  }catch(err){
+    console.error(err)
+    setStatus("Fehler beim Einlesen")
+    log("Fehler beim Einlesen: " + (err?.message || err))
+  }
 }
 
-buildBtn.disabled=false
+buildBtn.onclick = async () => {
+  try{
+    if(!selectedFiles.length) return
+
+    setStatus("Auswertung läuft ...")
+    logEl.textContent = ""
+
+    let rows = []
+    const anlagenSet = new Set()
+
+    for(const f of selectedFiles){
+      const text = cache.get(f.name)
+      const parsed = parse(text, f.name)
+      rows.push(...parsed)
+
+      if(parsed[0]?.Anlage) anlagenSet.add(parsed[0].Anlage)
+      log(`✓ ${f.name}: ${parsed.length} Ereignisse geparst`)
+    }
+
+    rows.sort((a,b) => toMillis(a.Datum, a.Zeit) - toMillis(b.Datum, b.Zeit))
+
+    const anlage = [...anlagenSet][0] || "SIMIS"
+    const { results, offeneStarts } = buildResults(rows)
+
+    const today = new Date()
+    const yyyy = today.getFullYear()
+    const mm = String(today.getMonth() + 1).padStart(2, "0")
+    const dd = String(today.getDate()).padStart(2, "0")
+    const exportDate = `${yyyy}${mm}${dd}`
+
+    const resultRows = results.length ? results : [
+      addFilename.checked
+        ? { "Startsignal":"", "Ausschaltung":"", "Dauer Sekunden":"", "Datei":"" }
+        : { "Startsignal":"", "Ausschaltung":"", "Dauer Sekunden":"" }
+    ]
+
+    const statRows = buildStats(results, rows, exportDate, anlage)
+
+    const wsResults = XLSX.utils.json_to_sheet(resultRows)
+    const wsStats = XLSX.utils.json_to_sheet(statRows)
+
+    styleHeader(wsResults, Object.keys(resultRows[0]))
+    styleHeader(wsStats, Object.keys(statRows[0]))
+
+    if(results.length){
+      results.forEach((r, i) => {
+        if(r["Dauer Sekunden"] > THRESHOLD){
+          const columnCount = Object.keys(r).length
+          for(let c = 0; c < columnCount; c++){
+            const cell = XLSX.utils.encode_cell({ r:i+1, c })
+            if(wsResults[cell]){
+              wsResults[cell].s = {
+                fill: { fgColor:{ rgb:"FFF2CC" } }
+              }
+            }
+          }
+        }
+      })
+    }
+
+    autoWidth(wsResults, resultRows)
+    autoWidth(wsStats, statRows)
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, wsResults, "Ergebnisse")
+    XLSX.utils.book_append_sheet(wb, wsStats, "Statistik")
+
+    const safeAnlage = sanitizeFileName(anlage)
+    XLSX.writeFile(wb, `${exportDate}_${safeAnlage}.xlsx`)
+
+    const over240 = results.filter(r => r["Dauer Sekunden"] > THRESHOLD).length
+
+    log(`Fertig: ${results.length} Treffer`)
+    log(`Davon > ${THRESHOLD}s: ${over240}`)
+    if(offeneStarts.length){
+      log(`Hinweis: ${offeneStarts.length} Startsignal(e) ohne Endsignal gefunden`)
+    }
+
+    setStatus(`Excel erzeugt: ${results.length} Treffer, ${over240} über ${THRESHOLD}s`)
+  }catch(err){
+    console.error(err)
+    setStatus("Fehler bei der Auswertung")
+    log("Fehler: " + (err?.message || err))
+  }
 }
-
-buildBtn.onclick=async()=>{
-
-let rows=[]
-for(const f of selectedFiles){
-rows.push(...parse(cache.get(f.name),f.name))
-}
-
-rows.sort((a,b)=>ms(a.Datum,a.Zeit)-ms(b.Datum,b.Zeit))
-
-const results=buildResults(rows)
-
-const ws2=XLSX.utils.json_to_sheet(results)
-
-results.forEach((r,i)=>{
-if(r["Dauer Sekunden"]>THRESHOLD){
-for(let c=0;c<4;c++){
-const cell=XLSX.utils.encode_cell({r:i+1,c})
-if(ws2[cell]) ws2[cell].s={fill:{fgColor:{rgb:"FFF2CC"}}}
-}
-}
-})
-
-const date=new Date().toISOString().slice(0,10).replace(/-/g,"")
-const ws3=XLSX.utils.json_to_sheet(stats(results,rows,date))
-
-const wb=XLSX.utils.book_new()
-XLSX.utils.book_append_sheet(wb,ws2,"Ergebnisse")
-XLSX.utils.book_append_sheet(wb,ws3,"Statistik")
-
-XLSX.writeFile(wb,`${date}_${anlagenName}.xlsx`)
-}
-
 </script>
 </body>
 </html>
