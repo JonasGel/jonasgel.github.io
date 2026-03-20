@@ -53,7 +53,11 @@ const cache = new Map()
 
 const THRESHOLD = 240
 const START = "031/05 HP-Schnittstelle 1: Einschaltung"
-const END = "001/02 Ausschaltabschnitt 1: Befahren"
+const END_SIGNALS = [
+  "001/02 Ausschaltabschnitt 1: Befahren",
+  "031/00 HP-Schnittstelle 1: Ausschaltung"
+]
+const END_LABEL = END_SIGNALS.join(" / ")
 const BUE = "023/01 FÜ-Schnittstelle meldet 'BÜ Eingeschaltet'"
 
 const MONTHS = {
@@ -198,6 +202,10 @@ function parse(text, filename){
   return rows
 }
 
+function isEndSignal(ereignis){
+  return END_SIGNALS.some(signal => ereignis.includes(signal))
+}
+
 function buildResults(rows){
   const openStarts = []
   const results = []
@@ -211,7 +219,7 @@ function buildResults(rows){
       continue
     }
 
-    if(row.Ereignis.includes(END) && openStarts.length){
+    if(isEndSignal(row.Ereignis) && openStarts.length){
       const start = openStarts.shift()
       const diff = (currentMs - toMillis(start.Datum, start.Zeit)) / 1000
 
@@ -258,7 +266,7 @@ function buildStatsForAnlage(results, rows, auswertungsDatum, anlage){
     "Datum": auswertungsDatum,
     "Anlage": anlage,
     "Startsignal": START,
-    "Endsignal": END,
+    "Endsignal": END_LABEL,
     "Schwellwert (240s)": THRESHOLD,
     "Einschaltungen Gesamt (HP + FÜ)": totalCount,
     "Einschaltungen HP-Schnittstelle": hpCount,
