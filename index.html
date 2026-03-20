@@ -50,6 +50,7 @@ const addFilename = document.getElementById("addFilename")
 
 let selectedFiles = []
 const cache = new Map()
+let masterAnlage = "SIMIS"
 
 const THRESHOLD = 240
 const START = "031/05 HP-Schnittstelle 1: Einschaltung"
@@ -167,8 +168,8 @@ function extractAnlage(text){
   return cleanAnlagenName(m ? m[1] : "SIMIS")
 }
 
-function parse(text, filename){
-  const anlage = extractAnlage(text)
+function parse(text, filename, forcedAnlage = null){
+  const anlage = forcedAnlage || extractAnlage(text)
   const cleaned = normalizeHtmlText(text)
 
   const re = /(\d{2}\.[A-Za-z]{3}\.\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+([\s\S]*?)(?=(?:\s*\d{2}\.[A-Za-z]{3}\.\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}\s+)|$)/g
@@ -330,6 +331,7 @@ fileInput.onchange = async () => {
   cache.clear()
   logEl.textContent = ""
   buildBtn.disabled = true
+  masterAnlage = "SIMIS"
 
   if(!selectedFiles.length){
     setStatus("")
@@ -339,14 +341,17 @@ fileInput.onchange = async () => {
   setStatus("Dateien werden eingelesen ...")
 
   try{
-    for(const f of selectedFiles){
+    for(let i = 0; i < selectedFiles.length; i++){
+      const f = selectedFiles[i]
       const text = await read(f)
       cache.set(f.name, text)
 
-      const parsed = parse(text, f.name)
-      const anlage = parsed[0]?.Anlage || extractAnlage(text)
+      if(i === 0){
+        masterAnlage = extractAnlage(text) || "SIMIS"
+      }
 
-      log(`✓ ${f.name} (${parsed.length} Ereignisse) – Anlage: ${anlage}`)
+      const parsed = parse(text, f.name, masterAnlage)
+      log(`✓ ${f.name} (${parsed.length} Ereignisse) – Anlage: ${masterAnlage}`)
     }
 
     buildBtn.disabled = false
@@ -366,14 +371,12 @@ buildBtn.onclick = async () => {
     logEl.textContent = ""
 
     let rows = []
-    const anlagenSet = new Set()
 
     for(const f of selectedFiles){
       const text = cache.get(f.name)
-      const parsed = parse(text, f.name)
+      const parsed = parse(text, f.name, masterAnlage)
       rows.push(...parsed)
 
-      if(parsed[0]?.Anlage) anlagenSet.add(parsed[0].Anlage)
       log(`✓ ${f.name}: ${parsed.length} Ereignisse geparst`)
     }
 
@@ -393,7 +396,7 @@ buildBtn.onclick = async () => {
       "Anlage": ""
     }]
 
-    const anlage = [...anlagenSet][0] || "SIMIS"
+    const anlage = masterAnlage || "SIMIS"
     const { results, offeneStarts } = buildResults(rows)
 
     const today = new Date()
@@ -408,16 +411,9 @@ buildBtn.onclick = async () => {
         : { "Startsignal":"", "Ausschaltung":"", "Dauer Sekunden":"" }
     ]
 
-    const uniqueAnlagen = [...new Set(rows.map(r => r.Anlage).filter(Boolean))]
-
-    const statsByAnlage = uniqueAnlagen.length
-      ? uniqueAnlagen.map(anl => {
-          const rowsForAnlage = rows.filter(r => r.Anlage === anl)
-          const rowsForAnlageSorted = [...rowsForAnlage].sort((a,b) => toMillis(a.Datum, a.Zeit) - toMillis(b.Datum, b.Zeit))
-          const resultsForAnlage = buildResults(rowsForAnlageSorted).results
-          return buildStatsForAnlage(resultsForAnlage, rowsForAnlageSorted, exportDate, anl)
-        })
-      : [buildStatsForAnlage([], [], exportDate, "SIMIS")]
+    const statsByAnlage = [
+      buildStatsForAnlage(results, rows, exportDate, anlage)
+    ]
 
     const statRows = buildStatsSheetRows(statsByAnlage)
 
