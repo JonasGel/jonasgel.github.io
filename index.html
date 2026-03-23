@@ -70,6 +70,10 @@ const MONTHS_NUM = {
   Jul:"07", Aug:"08", Sep:"09", Oct:"10", Nov:"11", Dec:"12"
 }
 
+const WEEKDAYS = [
+  "Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"
+]
+
 function log(msg){
   logEl.textContent += msg + "\n"
 }
@@ -145,6 +149,23 @@ function fmtDate(datum){
 
 function fmtDateTime(datum, zeit){
   return `${fmtDate(datum)} ${zeit}`
+}
+
+function parseDateParts(datum){
+  const m = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(datum)
+  if(!m) return null
+  const day = Number(m[1])
+  const month = MONTHS[m[2]]
+  const year = 2000 + Number(m[3])
+  if(month === undefined) return null
+  return { day, month, year }
+}
+
+function formatDayLabel(datum){
+  const parts = parseDateParts(datum)
+  if(!parts) return fmtDate(datum)
+  const d = new Date(Date.UTC(parts.year, parts.month, parts.day))
+  return `${WEEKDAYS[d.getUTCDay()]} ${fmtDate(datum)}`
 }
 
 function normalizeHtmlText(text){
@@ -224,9 +245,11 @@ function buildResults(rows){
       const diff = (currentMs - toMillis(start.Datum, start.Zeit)) / 1000
 
       const item = {
+        "Tag": formatDayLabel(start.Datum),
         "Startsignal": fmtDateTime(start.Datum, start.Zeit),
         "Ausschaltung": fmtDateTime(row.Datum, row.Zeit),
-        "Dauer Sekunden": Number(diff.toFixed(3))
+        "Dauer Sekunden": Number(diff.toFixed(3)),
+        "_startDatumRaw": start.Datum
       }
 
       if(addFilename.checked){
@@ -238,6 +261,44 @@ function buildResults(rows){
   }
 
   return { results, offeneStarts: openStarts }
+}
+
+function buildDailyRows(results){
+  const groups = new Map()
+
+  results.forEach(r => {
+    const key = r._startDatumRaw
+    if(!key) return
+
+    if(!groups.has(key)){
+      groups.set(key, {
+        datumRaw: key,
+        tag: formatDayLabel(key),
+        total: 0,
+        bad: 0
+      })
+    }
+
+    const g = groups.get(key)
+    g.total += 1
+    if(r["Dauer Sekunden"] > THRESHOLD) g.bad += 1
+  })
+
+  const rows = [...groups.values()]
+    .sort((a,b) => toMillis(a.datumRaw, "00:00:00.000") - toMillis(b.datumRaw, "00:00:00.000"))
+    .map(g => ({
+      "Tag": g.tag,
+      "Zugfahrten gesamt": g.total,
+      "Zugfahrten über 240 sec": g.bad,
+      "Fehlerquote %": g.total ? Number(((g.bad / g.total) * 100).toFixed(2)) : 0
+    }))
+
+  return rows.length ? rows : [{
+    "Tag": "",
+    "Zugfahrten gesamt": "",
+    "Zugfahrten über 240 sec": "",
+    "Fehlerquote %": ""
+  }]
 }
 
 function buildStatsForAnlage(results, rows, auswertungsDatum, anlage){
@@ -333,6 +394,16 @@ function styleHeader(ws, headers){
   })
 }
 
+function removeInternalFields(rows){
+  return rows.map(row => {
+    const out = {}
+    Object.keys(row).forEach(key => {
+      if(!key.startsWith("_")) out[key] = row[key]
+    })
+    return out
+  })
+}
+
 fileInput.onchange = async () => {
   selectedFiles = [...fileInput.files]
   cache.clear()
@@ -410,11 +481,14 @@ buildBtn.onclick = async () => {
     const dd = String(today.getDate()).padStart(2, "0")
     const exportDate = `${yyyy}${mm}${dd}`
 
-    const resultRows = results.length ? results : [
-      addFilename.checked
-        ? { "Startsignal":"", "Ausschaltung":"", "Dauer Sekunden":"", "Datei":"" }
-        : { "Startsignal":"", "Ausschaltung":"", "Dauer Sekunden":"" }
-    ]
+    const resultsForSheet = results.length
+      ? removeInternalFields(results)
+      : [addFilename.checked
+          ? { "Tag":"", "Startsignal":"", "Ausschaltung":"", "Dauer Sekunden":"", "Datei":"" }
+          : { "Tag":"", "Startsignal":"", "Ausschaltung":"", "Dauer Sekunden":"" }
+        ]
+
+    const dailyRows = buildDailyRows(results)
 
     const uniqueAnlagen = [...new Set(rows.map(r => r.Anlage).filter(Boolean))]
 
@@ -430,17 +504,19 @@ buildBtn.onclick = async () => {
     const statRows = buildStatsSheetRows(statsByAnlage)
 
     const wsRaw = XLSX.utils.json_to_sheet(rawRows)
-    const wsResults = XLSX.utils.json_to_sheet(resultRows)
+    const wsResults = XLSX.utils.json_to_sheet(resultsForSheet)
+    const wsDaily = XLSX.utils.json_to_sheet(dailyRows)
     const wsStats = XLSX.utils.json_to_sheet(statRows)
 
     styleHeader(wsRaw, Object.keys(rawRows[0]))
-    styleHeader(wsResults, Object.keys(resultRows[0]))
+    styleHeader(wsResults, Object.keys(resultsForSheet[0]))
+    styleHeader(wsDaily, Object.keys(dailyRows[0]))
     styleHeader(wsStats, Object.keys(statRows[0]))
 
     if(results.length){
       results.forEach((r, i) => {
         if(r["Dauer Sekunden"] > THRESHOLD){
-          const columnCount = Object.keys(r).length
+          const columnCount = Object.keys(resultsForSheet[0]).length
           for(let c = 0; c < columnCount; c++){
             const cell = XLSX.utils.encode_cell({ r:i+1, c })
             if(wsResults[cell]){
@@ -454,12 +530,14 @@ buildBtn.onclick = async () => {
     }
 
     autoWidth(wsRaw, rawRows)
-    autoWidth(wsResults, resultRows)
+    autoWidth(wsResults, resultsForSheet)
+    autoWidth(wsDaily, dailyRows)
     autoWidth(wsStats, statRows)
 
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, wsRaw, "Rohdaten")
     XLSX.utils.book_append_sheet(wb, wsResults, "Ergebnisse")
+    XLSX.utils.book_append_sheet(wb, wsDaily, "Tagesauswertung")
     XLSX.utils.book_append_sheet(wb, wsStats, "Statistik")
 
     const safeAnlage = sanitizeFileName(anlage)
