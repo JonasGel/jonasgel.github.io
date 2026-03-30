@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Startseite</title>
+  <style>
+    :root{
+      --bg:#f5f7fb;
+      --card:#ffffff;
+      --text:#1f2937;
+      --muted:#6b7280;
+      --accent:#1d4ed8;
+      --accent-hover:#1e40af;
+      --border:#dbe3ef;
+      --shadow:0 12px 30px rgba(15,23,42,.08);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background:linear-gradient(180deg,#eef4ff 0%, var(--bg) 100%);
+      color:var(--text);
+    }
+    .wrap{
+      max-width:1100px;
+      margin:0 auto;
+      padding:48px 20px 64px;
+    }
+    .hero{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:24px;
+      padding:40px 28px;
+      box-shadow:var(--shadow);
+      margin-bottom:28px;
+    }
+    h1{
+      font-size:clamp(2rem,4vw,3.4rem);
+      margin:0 0 12px;
+    }
+    .lead{
+      font-size:1.08rem;
+      color:var(--muted);
+      max-width:760px;
+      line-height:1.6;
+      margin:0;
+    }
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+      gap:20px;
+    }
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:20px;
+      padding:24px;
+      box-shadow:var(--shadow);
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+    .tag{
+      display:inline-block;
+      font-size:.85rem;
+      font-weight:700;
+      color:var(--accent);
+      background:#e8f0ff;
+      padding:6px 10px;
+      border-radius:999px;
+      width:max-content;
+    }
+    h2{
+      margin:0;
+      font-size:1.35rem;
+    }
+    p{
+      margin:0;
+      line-height:1.6;
+      color:var(--muted);
+    }
+    .button{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      margin-top:auto;
+      width:max-content;
+      min-width:180px;
+      padding:12px 18px;
+      border-radius:12px;
+      background:var(--accent);
+      color:#fff;
+      text-decoration:none;
+      font-weight:700;
+      transition:background .2s ease, transform .2s ease;
+    }
+    .button:hover{background:var(--accent-hover);transform:translateY(-1px)}
+    footer{
+      text-align:center;
+      color:var(--muted);
+      margin-top:32px;
+      font-size:.95rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>Willkommen</h1>
+      <p class="lead">Dies ist die Startseite deiner GitHub-Pages-Website. Über die Buttons gelangst du zu den einzelnen Unterseiten. Die Verlinkung erfolgt relativ, sodass die Seiten sowohl lokal als auch auf GitHub Pages sauber funktionieren.</p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <span class="tag">Tool</span>
+        <h2>SIMIS Log</h2>
+        <p>Auswertung von Dimotools-Protokollen mit Excel-Export, Tagesauswertung und Statistik.</p>
+        <a class="button" href="simis-log.html">SIMIS Log öffnen</a>
+      </article>
+
+      <article class="card">
+        <span class="tag">Platzhalter</span>
+        <h2>Kulturverein</h2>
+        <p>Vorläufige Platzhalter-Seite für die spätere Website eines Kulturvereins mit Bereichen für Programm, Projekte und Kontakt.</p>
+        <a class="button" href="kulturverein.html">Kulturverein öffnen</a>
+      </article>
+    </section>
+
+    <footer>GitHub Pages Projektstartseite</footer>
+  </div>
+</body>
+</html>

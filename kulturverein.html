@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kulturverein</title>
+  <style>
+    :root{
+      --bg:#f7f6f2;
+      --card:#ffffff;
+      --text:#222222;
+      --muted:#666666;
+      --accent:#8b5e3c;
+      --accent-soft:#f1e6dc;
+      --border:#e7ddd3;
+      --shadow:0 12px 28px rgba(43,31,17,.08);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      color:var(--text);
+      background:linear-gradient(180deg,#f4efe7 0%, var(--bg) 100%);
+    }
+    .wrap{max-width:1100px;margin:0 auto;padding:24px 20px 54px}
+    .nav a{
+      display:inline-flex;padding:10px 14px;border:1px solid var(--border);border-radius:12px;
+      color:var(--text);text-decoration:none;background:#fff;font-weight:600;
+    }
+    .hero{
+      margin-top:18px;background:var(--card);border:1px solid var(--border);border-radius:24px;
+      padding:44px 28px;box-shadow:var(--shadow);
+    }
+    .eyebrow{
+      display:inline-block;padding:6px 10px;border-radius:999px;background:var(--accent-soft);
+      color:var(--accent);font-weight:700;font-size:.85rem;margin-bottom:14px;
+    }
+    h1{margin:0 0 12px;font-size:clamp(2rem,4vw,3.3rem)}
+    .lead{margin:0;max-width:760px;line-height:1.7;color:var(--muted);font-size:1.05rem}
+    .grid{
+      display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px;margin-top:24px;
+    }
+    .card{
+      background:var(--card);border:1px solid var(--border);border-radius:20px;padding:22px;box-shadow:var(--shadow);
+    }
+    h2{margin:0 0 10px;font-size:1.2rem}
+    p{margin:0;line-height:1.6;color:var(--muted)}
+    .notice{
+      margin-top:24px;background:#fff;border-left:5px solid var(--accent);padding:18px 20px;border-radius:16px;
+      box-shadow:var(--shadow);
+    }
+    footer{text-align:center;color:var(--muted);margin-top:30px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="nav">
+      <a href="index.html">← Zur Startseite</a>
+    </div>
+
+    <section class="hero">
+      <span class="eyebrow">Platzhalter-Seite</span>
+      <h1>Kulturverein Musterstadt</h1>
+      <p class="lead">Willkommen auf der vorläufigen Website des Kulturvereins. Hier entsteht eine Präsenz für Veranstaltungen, Projekte, Mitmachangebote und aktuelle Informationen aus dem Vereinsleben.</p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Programm</h2>
+        <p>Hier können später Konzerte, Lesungen, Workshops und Ausstellungen vorgestellt werden.</p>
+      </article>
+      <article class="card">
+        <h2>Über uns</h2>
+        <p>Bereich für Vereinsgeschichte, Ziele, Vorstand und die Menschen hinter dem Kulturverein.</p>
+      </article>
+      <article class="card">
+        <h2>Mitmachen</h2>
+        <p>Informationen zu Mitgliedschaft, Ehrenamt, Spenden und Kooperationsmöglichkeiten.</p>
+      </article>
+      <article class="card">
+        <h2>Kontakt</h2>
+        <p>Später Platz für Kontaktformular, Adresse, Ansprechpersonen und Social-Media-Links.</p>
+      </article>
+    </section>
+
+    <div class="notice">
+      <strong>Hinweis:</strong> Diese Seite ist aktuell ein Platzhalter und kann als Grundlage für die spätere Vereinswebsite erweitert werden.
+    </div>
+
+    <footer>Platzhalter für den Kulturverein</footer>
+  </div>
+</body>
+</html>

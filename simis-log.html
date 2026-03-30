@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIMIS Log</title>
+
+<style>
+  :root{
+    --bg:#f5f7fb;
+    --card:#ffffff;
+    --text:#1f2937;
+    --muted:#6b7280;
+    --accent:#1d4ed8;
+    --accent-hover:#1e40af;
+    --border:#dbe3ef;
+    --shadow:0 12px 30px rgba(15,23,42,.08);
+    --warn:#fff2cc;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:linear-gradient(180deg,#eef4ff 0%, var(--bg) 100%);
+    color:var(--text);
+  }
+  .wrap{max-width:1050px;margin:0 auto;padding:24px 18px 40px}
+  .topbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+  .navlink{
+    display:inline-flex;align-items:center;justify-content:center;
+    padding:10px 14px;border-radius:12px;border:1px solid var(--border);
+    background:#fff;color:var(--text);text-decoration:none;font-weight:600;
+  }
+  .navlink:hover{border-color:#b7c8e6}
+  .hero,.card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:22px;
+    box-shadow:var(--shadow);
+  }
+  .hero{padding:28px 24px;margin-bottom:20px}
+  h1{margin:0 0 10px;font-size:clamp(1.9rem,4vw,3rem)}
+  .subtitle{margin:0;color:var(--muted);line-height:1.6}
+  .card{padding:22px}
+  .row{display:flex;gap:12px;margin-top:14px;flex-wrap:wrap;align-items:center}
+  button{
+    padding:11px 16px;border-radius:12px;cursor:pointer;border:none;
+    background:var(--accent);color:#fff;font-weight:700;
+  }
+  button:hover{background:var(--accent-hover)}
+  button:disabled{opacity:.6;cursor:not-allowed}
+  input[type="file"]{
+    width:100%;padding:14px;border:1px dashed #b8c6dd;border-radius:14px;background:#f9fbff;
+  }
+  pre{
+    background:#f8fafc;padding:14px;border-radius:14px;white-space:pre-wrap;
+    border:1px solid var(--border);min-height:140px;max-height:360px;overflow:auto;
+  }
+  .footer{text-align:center;margin-top:22px;color:var(--muted)}
+  .muted{color:var(--muted);font-size:.95rem}
+  .hint{margin-top:8px;color:var(--muted);font-size:.94rem;line-height:1.5}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="navlink" href="index.html">← Zur Startseite</a>
+  </div>
+
+  <section class="hero">
+    <h1>SIMIS Log</h1>
+    <p class="subtitle">Bitte alle für die Auswertung relevanten Dimotools-Protokolle auswählen. Nach dem Einlesen kann die Auswertung direkt als Excel-Datei exportiert werden.</p>
+  </section>
+
+  <div class="card">
+    <input id="files" type="file" multiple accept=".html,.htm">
+    <p class="hint">Mehrere Dateien können gleichzeitig ausgewählt werden.</p>
+
+    <div class="row">
+      <label><input type="checkbox" id="addFilename" checked> Dateiname-Spalte hinzufügen</label>
+    </div>
+
+    <div class="row">
+      <button id="build" disabled>Auswertung erzeugen</button>
+      <span id="status" class="muted"></span>
+    </div>
+
+    <h3>Log</h3>
+    <pre id="log"></pre>
+  </div>
+
+  <div class="footer">Copyright Jonas Gelhaus 2026</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+
+<script>
+const fileInput = document.getElementById("files")
+const buildBtn = document.getElementById("build")
+const logEl = document.getElementById("log")
+const statusEl = document.getElementById("status")
+const addFilename = document.getElementById("addFilename")
+
+let selectedFiles = []
+const cache = new Map()
+
+const THRESHOLD = 240
+const START = "031/05 HP-Schnittstelle 1: Einschaltung"
+const END_SIGNALS = [
+  "001/02 Ausschaltabschnitt 1: Befahren",
+  "031/00 HP-Schnittstelle 1: Ausschaltung"
+]
+const END_LABEL = END_SIGNALS.join(" / ")
+const BUE = "023/01 FÜ-Schnittstelle meldet 'BÜ Eingeschaltet'"
+
+const MONTHS = {
+  Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5,
+  Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11
+}
+
+const MONTHS_NUM = {
+  Jan:"01", Feb:"02", Mar:"03", Apr:"04", May:"05", Jun:"06",
+  Jul:"07", Aug:"08", Sep:"09", Oct:"10", Nov:"11", Dec:"12"
+}
+
+const WEEKDAYS = [
+  "Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"
+]
+
+function log(msg){
+  logEl.textContent += msg + "\n"
+}
+
+function setStatus(msg){
+  statusEl.textContent = msg
+}
+
+function decodeBuffer(buf){
+  const utf8 = new TextDecoder("utf-8", { fatal:false }).decode(buf)
+  const suspicious = (utf8.match(/Ã|â€|â€“|â€œ|â€ž|ï¿½|�/g) || []).length
+  if(suspicious >= 2){
+    return new TextDecoder("windows-1252").decode(buf)
+  }
+  return utf8
+}
+
+function read(file){
+  return new Promise((resolve, reject)=>{
+    const r = new FileReader()
+    r.onload = ()=> {
+      try{
+        resolve(decodeBuffer(r.result))
+      }catch(err){
+        reject(err)
+      }
+    }
+    r.onerror = ()=> reject(r.error)
+    r.readAsArrayBuffer(file)
+  })
+}
+
+function cleanAnlagenName(raw){
+  if(!raw) return "SIMIS"
+  return raw
+    .replace(/GPS.*/i, "")
+    .replace(/_BR_.*/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function sanitizeFileName(name){
+  return (name || "SIMIS")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, "_")
+}
+
+function toMillis(datum, zeit){
+  const dm = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(datum)
+  const tm = /(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(zeit)
+
+  if(!dm || !tm) return NaN
+  const year = 2000 + Number(dm[3])
+  const month = MONTHS[dm[2]]
+  if(month === undefined) return NaN
+
+  return Date.UTC(
+    year,
+    month,
+    Number(dm[1]),
+    Number(tm[1]),
+    Number(tm[2]),
+    Number(tm[3]),
+    Number(tm[4])
+  )
+}
+
+function fmtDate(datum){
+  const m = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(datum)
+  if(!m) return datum
+  return `${m[1]}.${MONTHS_NUM[m[2]] || "??"}.20${m[3]}`
+}
+
+function fmtDateTime(datum, zeit){
+  return `${fmtDate(datum)} ${zeit}`
+}
+
+function parseDateParts(datum){
+  const m = /(\d{2})\.([A-Za-z]{3})\.(\d{2})/.exec(datum)
+  if(!m) return null
+  const day = Number(m[1])
+  const month = MONTHS[m[2]]
+  const year = 2000 + Number(m[3])
+  if(month === undefined) return null
+  return { day, month, year }
+}
+
+function formatDayLabel(datum){
+  const parts = parseDateParts(datum)
+  if(!parts) return fmtDate(datum)
+  const d = new Date(Date.UTC(parts.year, parts.month, parts.day))
+  return `${WEEKDAYS[d.getUTCDay()]} ${fmtDate(datum)}`
+}
+
+function normalizeHtmlText(text){
+  return text
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<div[^>]*>/gi, " ")
+    .replace(/<\/?center[^>]*>/gi, " ")
+    .replace(/<\/?font[^>]*>/gi, " ")
+    .replace(/<\/?b[^>]*>/gi, " ")
+    .replace(/<\/?td[^>]*>/gi, " ")
+    .replace(/<\/?tr[^>]*>/gi, " ")
+    .replace(/<\/?table[^>]*>/gi, " ")
+    .replace(/<\/?head[^>]*>/gi, " ")
+    .replace(/<\/?body[^>]*>/gi, " ")
+    .replace(/<\/?html[^>]*>/gi, " ")
+    .replace(/<\/?style[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<img[^>]*>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+}
+
+function extractAnlage(text){
+  const m = /Anlage:\s*([^\n\r<]+)/i.exec(text)
+  return cleanAnlagenName(m ? m[1] : "SIMIS")
+}
+
+function parse(text, filename){
+  const anlage = extractAnlage(text)
+  const cleaned = normalizeHtmlText(text)
+
+  const re = /(\d{2}\.[A-Za-z]{3}\.\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+([\s\S]*?)(?=(?:\s*\d{2}\.[A-Za-z]{3}\.\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}\s+)|$)/g
+
+  const rows = []
+  let m
+
+  while((m = re.exec(cleaned)) !== null){
+    let ereignis = m[3]
+      .replace(/\u0000/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+
+    if(!ereignis) continue
+    if(/SIEMENS AG/i.test(ereignis)) continue
+    if(/Transportation Systems\. Copyright/i.test(ereignis)) continue
+
+    rows.push({
+      Datum: m[1],
+      Zeit: m[2],
+      Ereignis: ereignis,
+      Datei: filename,
+      Anlage: anlage
+    })
+  }
+
+  return rows
+}
+
+function isEndSignal(ereignis){
+  return END_SIGNALS.some(signal => ereignis.includes(signal))
+}
+
+function buildResults(rows){
+  const openStarts = []
+  const results = []
+
+  for(const row of rows){
+    const currentMs = toMillis(row.Datum, row.Zeit)
+    if(!Number.isFinite(currentMs)) continue
+
+    if(row.Ereignis.includes(START)){
+      openStarts.push(row)
+      continue
+    }
+
+    if(isEndSignal(row.Ereignis) && openStarts.length){
+      const start = openStarts.shift()
+      const diff = (currentMs - toMillis(start.Datum, start.Zeit)) / 1000
+
+      const item = {
+        "Tag": formatDayLabel(start.Datum),
+        "Startsignal": fmtDateTime(start.Datum, start.Zeit),
+        "Ausschaltung": fmtDateTime(row.Datum, row.Zeit),
+        "Dauer Sekunden": Number(diff.toFixed(3)),
+        "_startDatumRaw": start.Datum
+      }
+
+      if(addFilename.checked){
+        item["Datei"] = row.Datei || ""
+      }
+
+      results.push(item)
+    }
+  }
+
+  return { results, offeneStarts: openStarts }
+}
+
+function buildDailyRows(results, rows){
+  const groups = new Map()
+
+  rows.forEach(r => {
+    const isActivation = r.Ereignis.includes(START) || r.Ereignis.includes(BUE)
+    if(!isActivation) return
+
+    const key = r.Datum
+    if(!groups.has(key)){
+      groups.set(key, {
+        datumRaw: key,
+        tag: formatDayLabel(key),
+        total: 0,
+        bad: 0
+      })
+    }
+
+    groups.get(key).total += 1
+  })
+
+  results.forEach(r => {
+    const key = r._startDatumRaw
+    if(!key) return
+
+    if(!groups.has(key)){
+      groups.set(key, {
+        datumRaw: key,
+        tag: formatDayLabel(key),
+        total: 0,
+        bad: 0
+      })
+    }
+
+    if(r["Dauer Sekunden"] > THRESHOLD){
+      groups.get(key).bad += 1
+    }
+  })
+
+  const dailyRows = [...groups.values()]
+    .sort((a,b) => toMillis(a.datumRaw, "00:00:00.000") - toMillis(b.datumRaw, "00:00:00.000"))
+    .map(g => ({
+      "Tag": g.tag,
+      "Zugfahrten gesamt": g.total,
+      "Zugfahrten über 240 sec": g.bad,
+      "Fehlerquote %": g.total ? Number(((g.bad / g.total) * 100).toFixed(2)) : 0
+    }))
+
+  return dailyRows.length ? dailyRows : [{
+    "Tag": "",
+    "Zugfahrten gesamt": "",
+    "Zugfahrten über 240 sec": "",
+    "Fehlerquote %": ""
+  }]
+}
+
+function buildStatsForAnlage(results, rows, auswertungsDatum, anlage){
+  const hpCount = rows.filter(r => r.Ereignis.includes(START)).length
+  const totalCount = rows.filter(r =>
+    r.Ereignis.includes(START) || r.Ereignis.includes(BUE)
+  ).length
+
+  const durations = results.map(r => r["Dauer Sekunden"])
+  const over = durations.filter(v => v > THRESHOLD).length
+  const underOrEqual = durations.filter(v => v <= THRESHOLD).length
+
+  const avg = durations.length
+    ? Number((durations.reduce((a,b)=>a+b,0) / durations.length).toFixed(3))
+    : ""
+
+  const min = durations.length
+    ? Number(Math.min(...durations).toFixed(3))
+    : ""
+
+  const max = durations.length
+    ? Number(Math.max(...durations).toFixed(3))
+    : ""
+
+  return {
+    "Datum": auswertungsDatum,
+    "Anlage": anlage,
+    "Startsignal": START,
+    "Endsignal": END_LABEL,
+    "Schwellwert (240s)": THRESHOLD,
+    "Einschaltungen Gesamt (HP + FÜ)": totalCount,
+    "Einschaltungen HP-Schnittstelle": hpCount,
+    "> 240 sec": over,
+    "<=240 sec": underOrEqual,
+    "Mittelwert": avg,
+    "Minimum": min,
+    "Maximum": max
+  }
+}
+
+function buildStatsSheetRows(statsByAnlage){
+  const labels = [
+    "Datum",
+    "Anlage",
+    "Startsignal",
+    "Endsignal",
+    "Schwellwert (240s)",
+    "Einschaltungen Gesamt (HP + FÜ)",
+    "Einschaltungen HP-Schnittstelle",
+    "> 240 sec",
+    "<=240 sec",
+    "Mittelwert",
+    "Minimum",
+    "Maximum"
+  ]
+
+  return labels.map(label => {
+    const row = { "Kennzahl": label }
+    statsByAnlage.forEach((stats, index) => {
+      const colName = stats["Anlage"] || `Anlage ${index + 1}`
+      row[colName] = stats[label]
+    })
+    return row
+  })
+}
+
+function autoWidth(ws, data){
+  if(!data || !data.length) return
+
+  const headers = Object.keys(data[0])
+  const widths = headers.map(h => ({ wch: Math.max(12, String(h).length + 2) }))
+
+  data.forEach(row => {
+    headers.forEach((h, i) => {
+      const len = String(row[h] ?? "").length + 2
+      if(len > widths[i].wch) widths[i].wch = Math.min(len, 80)
+    })
+  })
+
+  ws["!cols"] = widths
+}
+
+function styleHeader(ws, headers){
+  headers.forEach((_, c) => {
+    const cell = XLSX.utils.encode_cell({ r:0, c })
+    if(ws[cell]){
+      ws[cell].s = {
+        font: { bold:true },
+        fill: { fgColor:{ rgb:"D9EAF7" } },
+        alignment: { horizontal:"center", vertical:"center" }
+      }
+    }
+  })
+}
+
+function removeInternalFields(rows){
+  return rows.map(row => {
+    const out = {}
+    Object.keys(row).forEach(key => {
+      if(!key.startsWith("_")) out[key] = row[key]
+    })
+    return out
+  })
+}
+
+fileInput.onchange = async () => {
+  selectedFiles = [...fileInput.files]
+  cache.clear()
+  logEl.textContent = ""
+  buildBtn.disabled = true
+
+  if(!selectedFiles.length){
+    setStatus("")
+    return
+  }
+
+  setStatus("Dateien werden eingelesen ...")
+
+  try{
+    for(const f of selectedFiles){
+      const text = await read(f)
+      cache.set(f.name, text)
+
+      const parsed = parse(text, f.name)
+      const anlage = parsed[0]?.Anlage || extractAnlage(text)
+
+      log(`✓ ${f.name} (${parsed.length} Ereignisse) – Anlage: ${anlage}`)
+    }
+
+    buildBtn.disabled = false
+    setStatus(`${selectedFiles.length} Datei(en) bereit`)
+  }catch(err){
+    console.error(err)
+    setStatus("Fehler beim Einlesen")
+    log("Fehler beim Einlesen: " + (err?.message || err))
+  }
+}
+
+buildBtn.onclick = async () => {
+  try{
+    if(!selectedFiles.length) return
+
+    setStatus("Auswertung läuft ...")
+    logEl.textContent = ""
+
+    let rows = []
+    const anlagenSet = new Set()
+
+    for(const f of selectedFiles){
+      const text = cache.get(f.name)
+      const parsed = parse(text, f.name)
+      rows.push(...parsed)
+
+      if(parsed[0]?.Anlage) anlagenSet.add(parsed[0].Anlage)
+      log(`✓ ${f.name}: ${parsed.length} Ereignisse geparst`)
+    }
+
+    rows.sort((a,b) => toMillis(a.Datum, a.Zeit) - toMillis(b.Datum, b.Zeit))
+
+    const rawRows = rows.length ? rows.map(r => ({
+      "Datum": fmtDate(r.Datum),
+      "Zeit": r.Zeit,
+      "Ereignis": r.Ereignis,
+      "Datei": r.Datei,
+      "Anlage": r.Anlage
+    })) : [{
+      "Datum": "",
+      "Zeit": "",
+      "Ereignis": "",
+      "Datei": "",
+      "Anlage": ""
+    }]
+
+    const anlage = [...anlagenSet][0] || "SIMIS"
+    const { results, offeneStarts } = buildResults(rows)
+
+    const today = new Date()
+    const yyyy = today.getFullYear()
+    const mm = String(today.getMonth() + 1).padStart(2, "0")
+    const dd = String(today.getDate()).padStart(2, "0")
+    const exportDate = `${yyyy}${mm}${dd}`
+
+    const resultsForSheet = results.length
+      ? removeInternalFields(results)
+      : [addFilename.checked
+          ? { "Tag":"", "Startsignal":"", "Ausschaltung":"", "Dauer Sekunden":"", "Datei":"" }
+          : { "Tag":"", "Startsignal":"", "Ausschaltung":"", "Dauer Sekunden":"" }
+        ]
+
+    const dailyRows = buildDailyRows(results, rows)
+
+    const uniqueAnlagen = [...new Set(rows.map(r => r.Anlage).filter(Boolean))]
+
+    const statsByAnlage = uniqueAnlagen.length
+      ? uniqueAnlagen.map(anl => {
+          const rowsForAnlage = rows.filter(r => r.Anlage === anl)
+          const rowsForAnlageSorted = [...rowsForAnlage].sort((a,b) => toMillis(a.Datum, a.Zeit) - toMillis(b.Datum, b.Zeit))
+          const resultsForAnlage = buildResults(rowsForAnlageSorted).results
+          return buildStatsForAnlage(resultsForAnlage, rowsForAnlageSorted, exportDate, anl)
+        })
+      : [buildStatsForAnlage([], [], exportDate, "SIMIS")]
+
+    const statRows = buildStatsSheetRows(statsByAnlage)
+
+    const wsRaw = XLSX.utils.json_to_sheet(rawRows)
+    const wsResults = XLSX.utils.json_to_sheet(resultsForSheet)
+    const wsDaily = XLSX.utils.json_to_sheet(dailyRows)
+    const wsStats = XLSX.utils.json_to_sheet(statRows)
+
+    styleHeader(wsRaw, Object.keys(rawRows[0]))
+    styleHeader(wsResults, Object.keys(resultsForSheet[0]))
+    styleHeader(wsDaily, Object.keys(dailyRows[0]))
+    styleHeader(wsStats, Object.keys(statRows[0]))
+
+    if(results.length){
+      results.forEach((r, i) => {
+        if(r["Dauer Sekunden"] > THRESHOLD){
+          const columnCount = Object.keys(resultsForSheet[0]).length
+          for(let c = 0; c < columnCount; c++){
+            const cell = XLSX.utils.encode_cell({ r:i+1, c })
+            if(wsResults[cell]){
+              wsResults[cell].s = {
+                fill: { fgColor:{ rgb:"FFF2CC" } }
+              }
+            }
+          }
+        }
+      })
+    }
+
+    autoWidth(wsRaw, rawRows)
+    autoWidth(wsResults, resultsForSheet)
+    autoWidth(wsDaily, dailyRows)
+    autoWidth(wsStats, statRows)
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, wsRaw, "Rohdaten")
+    XLSX.utils.book_append_sheet(wb, wsResults, "Ergebnisse")
+    XLSX.utils.book_append_sheet(wb, wsDaily, "Tagesauswertung")
+    XLSX.utils.book_append_sheet(wb, wsStats, "Statistik")
+
+    const safeAnlage = sanitizeFileName(anlage)
+    XLSX.writeFile(wb, `${exportDate}_${safeAnlage}.xlsx`)
+
+    const over240 = results.filter(r => r["Dauer Sekunden"] > THRESHOLD).length
+
+    log(`Fertig: ${results.length} Treffer`)
+    log(`Davon > ${THRESHOLD}s: ${over240}`)
+    if(offeneStarts.length){
+      log(`Hinweis: ${offeneStarts.length} Startsignal(e) ohne Endsignal gefunden`)
+    }
+
+    setStatus(`Excel erzeugt: ${results.length} Treffer, ${over240} über ${THRESHOLD}s`)
+  }catch(err){
+    console.error(err)
+    setStatus("Fehler bei der Auswertung")
+    log("Fehler: " + (err?.message || err))
+  }
+}
+</script>
+</body>
+</html>
