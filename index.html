@@ -263,8 +263,25 @@ function buildResults(rows){
   return { results, offeneStarts: openStarts }
 }
 
-function buildDailyRows(results){
+function buildDailyRows(results, rows){
   const groups = new Map()
+
+  rows.forEach(r => {
+    const isActivation = r.Ereignis.includes(START) || r.Ereignis.includes(BUE)
+    if(!isActivation) return
+
+    const key = r.Datum
+    if(!groups.has(key)){
+      groups.set(key, {
+        datumRaw: key,
+        tag: formatDayLabel(key),
+        total: 0,
+        bad: 0
+      })
+    }
+
+    groups.get(key).total += 1
+  })
 
   results.forEach(r => {
     const key = r._startDatumRaw
@@ -279,12 +296,12 @@ function buildDailyRows(results){
       })
     }
 
-    const g = groups.get(key)
-    g.total += 1
-    if(r["Dauer Sekunden"] > THRESHOLD) g.bad += 1
+    if(r["Dauer Sekunden"] > THRESHOLD){
+      groups.get(key).bad += 1
+    }
   })
 
-  const rows = [...groups.values()]
+  const dailyRows = [...groups.values()]
     .sort((a,b) => toMillis(a.datumRaw, "00:00:00.000") - toMillis(b.datumRaw, "00:00:00.000"))
     .map(g => ({
       "Tag": g.tag,
@@ -293,7 +310,7 @@ function buildDailyRows(results){
       "Fehlerquote %": g.total ? Number(((g.bad / g.total) * 100).toFixed(2)) : 0
     }))
 
-  return rows.length ? rows : [{
+  return dailyRows.length ? dailyRows : [{
     "Tag": "",
     "Zugfahrten gesamt": "",
     "Zugfahrten über 240 sec": "",
@@ -488,7 +505,7 @@ buildBtn.onclick = async () => {
           : { "Tag":"", "Startsignal":"", "Ausschaltung":"", "Dauer Sekunden":"" }
         ]
 
-    const dailyRows = buildDailyRows(results)
+    const dailyRows = buildDailyRows(results, rows)
 
     const uniqueAnlagen = [...new Set(rows.map(r => r.Anlage).filter(Boolean))]
 
