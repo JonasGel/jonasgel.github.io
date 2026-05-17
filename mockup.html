@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kulturwerkstatt Forum e.V. — Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0e0d0b;
+  --bg-2: #161412;
+  --cream: #f6efe0;
+  --paper: #f1e9d6;
+  --ink: #0e0d0b;
+  --accent: #ff4d2e;     /* bold orange-red */
+  --accent-2: #ffd60a;   /* yellow */
+  --accent-3: #5ce1e6;   /* electric teal */
+  --pink: #ff3ea5;
+  --muted: #8a8275;
+  --line: rgba(246, 239, 224, 0.12);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--cream);
+  font-family: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 17px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+a { color: inherit; text-decoration: none; }
+img { display: block; max-width: 100%; height: auto; }
+
+/* ===================== NAV ===================== */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 32px;
+  background: rgba(14, 13, 11, 0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 18px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.brand .dot {
+  width: 12px; height: 12px;
+  background: var(--accent);
+  display: inline-block;
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+.nav ul {
+  display: flex;
+  gap: 28px;
+  list-style: none;
+  margin: 0; padding: 0;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+.nav ul a { opacity: 0.8; transition: opacity .2s, color .2s; }
+.nav ul a:hover { opacity: 1; color: var(--accent-2); }
+.nav .cta {
+  background: var(--accent);
+  color: var(--ink);
+  padding: 10px 18px;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  transition: transform .2s, background .2s;
+}
+.nav .cta:hover { transform: translateY(-2px); background: var(--accent-2); }
+@media (max-width: 880px) {
+  .nav ul { display: none; }
+  .nav { padding: 14px 18px; }
+}
+
+/* ===================== HERO ===================== */
+.hero {
+  position: relative;
+  padding: 80px 32px 60px;
+  overflow: hidden;
+}
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: end;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 28px;
+}
+.hero-tag::before {
+  content: "";
+  width: 32px; height: 2px;
+  background: var(--accent-2);
+}
+.hero h1 {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: clamp(56px, 9vw, 156px);
+  line-height: 0.86;
+  letter-spacing: -0.03em;
+  margin: 0;
+  text-transform: uppercase;
+}
+.hero h1 .stroke {
+  -webkit-text-stroke: 2px var(--cream);
+  color: transparent;
+}
+.hero h1 .red { color: var(--accent); }
+.hero h1 .yellow { color: var(--accent-2); }
+.hero h1 em {
+  font-style: normal;
+  position: relative;
+  display: inline-block;
+}
+.hero h1 em::after {
+  content: "";
+  position: absolute;
+  left: -4px; right: -4px;
+  bottom: 6%;
+  height: 18%;
+  background: var(--pink);
+  z-index: -1;
+  transform: skewX(-6deg);
+}
+.hero p.lead {
+  font-size: 19px;
+  line-height: 1.5;
+  max-width: 460px;
+  color: rgba(246, 239, 224, 0.78);
+  margin: 28px 0 36px;
+}
+.hero-cta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 26px;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  transition: transform .2s, background .2s, color .2s;
+  cursor: pointer;
+}
+.btn-primary { background: var(--accent); color: var(--ink); }
+.btn-primary:hover { background: var(--accent-2); transform: translateY(-2px); }
+.btn-ghost { border-color: var(--cream); color: var(--cream); }
+.btn-ghost:hover { background: var(--cream); color: var(--ink); }
+
+.hero-visual {
+  position: relative;
+  aspect-ratio: 4/5;
+  border-radius: 4px;
+  overflow: hidden;
+  background: url('https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=900&q=80') center/cover no-repeat;
+  filter: contrast(1.05) saturate(1.05);
+}
+.hero-visual::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, transparent 40%, rgba(14,13,11,0.85));
+}
+.hero-sticker {
+  position: absolute;
+  right: -20px;
+  top: 30px;
+  width: 180px; height: 180px;
+  background: var(--accent-2);
+  color: var(--ink);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 15px;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transform: rotate(-8deg);
+  z-index: 10;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+  animation: wobble 6s ease-in-out infinite;
+}
+@keyframes wobble {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(-2deg); }
+}
+.hero-badge {
+  position: absolute;
+  left: 24px; bottom: 24px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 14px 18px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cream);
+  z-index: 5;
+}
+@media (max-width: 880px) {
+  .hero { padding: 40px 20px; }
+  .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+  .hero-sticker { width: 130px; height: 130px; font-size: 12px; right: -10px; top: -20px; }
+}
+
+/* ===================== MARQUEE ===================== */
+.marquee {
+  background: var(--accent);
+  color: var(--ink);
+  padding: 18px 0;
+  overflow: hidden;
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.marquee-track {
+  display: flex;
+  gap: 40px;
+  white-space: nowrap;
+  animation: marquee 30s linear infinite;
+  width: max-content;
+}
+.marquee span { display: inline-flex; align-items: center; gap: 40px; }
+.marquee .star {
+  width: 22px; height: 22px;
+  background: var(--ink);
+  display: inline-block;
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* ===================== SECTION SHELL ===================== */
+section { padding: 100px 32px; max-width: 1400px; margin: 0 auto; }
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 32px;
+  margin-bottom: 48px;
+  flex-wrap: wrap;
+}
+.section-eyebrow {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 12px;
+  display: flex; align-items: center; gap: 10px;
+}
+.section-eyebrow::before {
+  content: ""; width: 28px; height: 2px; background: var(--accent);
+}
+.section-title {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: clamp(36px, 5vw, 72px);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  margin: 0;
+  max-width: 800px;
+}
+
+/* ===================== EVENTS ===================== */
+.events {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+.event-card {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  transition: transform .25s, border-color .25s;
+  position: relative;
+  overflow: hidden;
+  min-height: 420px;
+}
+.event-card:hover {
+  transform: translateY(-6px);
+  border-color: var(--accent);
+}
+.event-image {
+  position: relative;
+  aspect-ratio: 4/3;
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+}
+.event-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(14,13,11,0.1) 0%, rgba(14,13,11,0.85) 100%),
+    linear-gradient(180deg, rgba(14,13,11,0.4) 0%, rgba(14,13,11,0) 30%);
+  transition: opacity .3s;
+}
+.event-card:hover .event-image::after { opacity: 0.7; }
+.event-image > * { position: relative; z-index: 1; }
+.event-image .event-date-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: var(--accent);
+  color: var(--ink);
+  padding: 10px 14px;
+  font-family: 'Archivo Black', sans-serif;
+  text-transform: uppercase;
+  line-height: 1;
+  text-align: center;
+  z-index: 2;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+.event-image .event-date-badge .day { display: block; font-size: 32px; }
+.event-image .event-date-badge .month { display: block; font-size: 11px; letter-spacing: 0.14em; margin-top: 4px; }
+.event-image .event-cat {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  padding: 6px 12px;
+  background: rgba(14, 13, 11, 0.7);
+  backdrop-filter: blur(8px);
+  color: var(--accent-2);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  z-index: 2;
+}
+.event-body {
+  padding: 24px 26px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+}
+.event-title {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 22px;
+  line-height: 1.1;
+  text-transform: uppercase;
+  margin: 0;
+  letter-spacing: -0.01em;
+  color: var(--cream);
+}
+.event-meta {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+}
+.event-meta .time { font-size: 14px; color: rgba(246, 239, 224, 0.7); }
+.event-meta .price {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 14px;
+  color: var(--accent-2);
+}
+.event-arrow {
+  position: absolute;
+  bottom: 22px; right: 22px;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  opacity: 0;
+  transform: translate(-6px, 6px);
+  transition: opacity .25s, transform .25s;
+  z-index: 3;
+}
+.event-card:hover .event-arrow { opacity: 1; transform: translate(0, 0); }
+
+@media (max-width: 1000px) { .events { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px)  { .events { grid-template-columns: 1fr; } section { padding: 60px 20px; } }
+
+/* ===================== ABOUT ===================== */
+.about {
+  background: var(--paper);
+  color: var(--ink);
+  max-width: none;
+  margin: 0;
+  padding: 100px 32px;
+}
+.about-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 80px;
+  align-items: center;
+}
+.about .section-eyebrow { color: var(--accent); }
+.about .section-eyebrow::before { background: var(--accent); }
+.about h2 {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: clamp(38px, 5vw, 76px);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  margin: 0 0 28px;
+  color: var(--ink);
+}
+.about h2 .highlight {
+  background: var(--accent-2);
+  padding: 0 8px;
+}
+.about p { color: #2a2620; font-size: 17px; line-height: 1.6; }
+.about .stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 2px solid var(--ink);
+}
+.about .stats div .num {
+  display: block;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 48px;
+  line-height: 1;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+.about .stats div .label {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-top: 8px;
+  display: block;
+  color: #2a2620;
+}
+.about-image {
+  position: relative;
+  aspect-ratio: 4/5;
+  background: url('https://images.unsplash.com/photo-1519681393784-d120267933ba?w=900&q=80') center/cover no-repeat;
+  border-radius: 4px;
+  overflow: hidden;
+  transform: rotate(-1.5deg);
+  box-shadow: 0 30px 60px rgba(0,0,0,0.25);
+}
+.about-image::after {
+  content: "";
+  position: absolute;
+  inset: 16px;
+  border: 2px solid var(--cream);
+  pointer-events: none;
+}
+@media (max-width: 900px) {
+  .about-inner { grid-template-columns: 1fr; gap: 40px; }
+  .about { padding: 60px 20px; }
+}
+
+/* ===================== FREITAGS ===================== */
+.freitags-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-top: 20px;
+}
+.freitag-card {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  transition: background .25s, transform .25s;
+}
+.freitag-card:hover {
+  background: var(--accent);
+  color: var(--ink);
+  transform: translateY(-4px);
+}
+.freitag-card .icon {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--ink);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 28px;
+}
+.freitag-card:hover .icon { background: var(--ink); color: var(--cream); }
+.freitag-card h3 {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 22px;
+  text-transform: uppercase;
+  margin: 0;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+.freitag-card p { font-size: 15px; margin: 0; color: rgba(246, 239, 224, 0.75); }
+.freitag-card:hover p { color: rgba(14, 13, 11, 0.85); }
+.freitag-card .when {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-top: auto;
+}
+.freitag-card:hover .when { color: var(--ink); }
+
+@media (max-width: 900px) { .freitags-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px) { .freitags-grid { grid-template-columns: 1fr; } }
+
+/* ===================== MITMACHEN ===================== */
+.mitmachen-section {
+  position: relative;
+  padding: 120px 32px;
+  background: var(--accent);
+  color: var(--ink);
+  overflow: hidden;
+  max-width: none;
+  margin: 0;
+}
+.mitmachen-section::before {
+  content: "MITMACHEN MITMACHEN MITMACHEN MITMACHEN";
+  position: absolute;
+  top: 0; left: 0;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 320px;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  color: rgba(14, 13, 11, 0.06);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 0;
+}
+.mitmachen-inner { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; }
+.mitmachen-inner h2 {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: clamp(48px, 8vw, 130px);
+  line-height: 0.9;
+  text-transform: uppercase;
+  letter-spacing: -0.03em;
+  margin: 0 0 32px;
+}
+.mitmachen-inner h2 .underline {
+  text-decoration: underline;
+  text-decoration-thickness: 8px;
+  text-underline-offset: 4px;
+}
+.mitmachen-inner p { font-size: 19px; max-width: 600px; line-height: 1.55; margin-bottom: 40px; }
+.mitmachen-roles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-top: 60px;
+  border-top: 2px solid var(--ink);
+}
+.role {
+  border-bottom: 2px solid var(--ink);
+  border-right: 2px solid var(--ink);
+  padding: 28px 20px;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 26px;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: background .2s;
+  cursor: pointer;
+}
+.role:hover { background: var(--ink); color: var(--cream); }
+.role .num {
+  font-size: 14px;
+  font-weight: 400;
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: 0.16em;
+  opacity: 0.6;
+}
+.role:nth-child(3n) { border-right: none; }
+@media (max-width: 900px) {
+  .mitmachen-roles { grid-template-columns: repeat(2, 1fr); }
+  .role:nth-child(3n) { border-right: 2px solid var(--ink); }
+  .role:nth-child(2n) { border-right: none; }
+  .mitmachen-section { padding: 60px 20px; }
+}
+@media (max-width: 520px) {
+  .mitmachen-roles { grid-template-columns: 1fr; }
+  .role { border-right: none !important; }
+}
+
+/* ===================== ANFAHRT ===================== */
+.location {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: center;
+}
+.location-info h2 {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: clamp(38px, 5vw, 72px);
+  line-height: 0.95;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  margin: 0 0 24px;
+}
+.location-info h2 .accent { color: var(--accent-3); }
+.location-info .address {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 22px;
+  text-transform: uppercase;
+  line-height: 1.3;
+  margin-bottom: 24px;
+}
+.location-info p { color: rgba(246, 239, 224, 0.78); margin-bottom: 18px; }
+.location-info .modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 28px;
+}
+.location-info .mode {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  padding: 20px;
+}
+.location-info .mode h4 {
+  margin: 0 0 8px;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-2);
+}
+.location-info .mode p { margin: 0; font-size: 14px; }
+.location-map {
+  aspect-ratio: 1/1;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  position: relative;
+  overflow: hidden;
+}
+.location-map iframe { width: 100%; height: 100%; border: 0; filter: grayscale(0.5) contrast(1.1); }
+.location-map .pin {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -100%);
+  background: var(--accent);
+  color: var(--ink);
+  padding: 8px 14px;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}
+@media (max-width: 900px) {
+  .location { grid-template-columns: 1fr; gap: 32px; }
+}
+
+/* ===================== NEWSLETTER ===================== */
+.newsletter {
+  background: var(--accent-3);
+  color: var(--ink);
+  padding: 100px 32px;
+  max-width: none;
+  margin: 0;
+}
+.newsletter-inner {
+  max-width: 1000px;
+  margin: 0 auto;
+  text-align: center;
+}
+.newsletter h2 {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: clamp(40px, 6vw, 88px);
+  line-height: 0.95;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  margin: 0 0 24px;
+}
+.newsletter p { font-size: 18px; max-width: 560px; margin: 0 auto 40px; line-height: 1.5; }
+.newsletter-form {
+  display: flex;
+  gap: 12px;
+  max-width: 560px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+}
+.newsletter-form input {
+  flex: 1;
+  min-width: 240px;
+  padding: 16px 22px;
+  border: 2px solid var(--ink);
+  background: var(--cream);
+  color: var(--ink);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 16px;
+  border-radius: 999px;
+  outline: none;
+}
+.newsletter-form button {
+  padding: 16px 28px;
+  background: var(--ink);
+  color: var(--cream);
+  border: 2px solid var(--ink);
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.newsletter-form button:hover { background: var(--accent); color: var(--ink); }
+.newsletter small { display: block; margin-top: 18px; opacity: 0.7; font-size: 13px; }
+
+/* ===================== FOOTER ===================== */
+footer {
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  padding: 80px 32px 40px;
+}
+.footer-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 40px;
+}
+.footer-brand {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 48px;
+  line-height: 0.9;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+}
+.footer-brand .accent { color: var(--accent); }
+.footer-brand + p { color: rgba(246, 239, 224, 0.6); margin-top: 16px; max-width: 320px; font-size: 14px; }
+footer h4 {
+  margin: 0 0 16px;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent-2);
+}
+footer ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+footer ul a { opacity: 0.7; transition: opacity .2s, color .2s; }
+footer ul a:hover { opacity: 1; color: var(--accent); }
+.footer-bottom {
+  max-width: 1400px;
+  margin: 60px auto 0;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: rgba(246, 239, 224, 0.55);
+}
+.socials {
+  display: flex;
+  gap: 12px;
+}
+.social-icon {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center;
+  transition: background .2s, transform .2s, color .2s;
+  color: var(--cream);
+}
+.social-icon:hover { background: var(--accent); color: var(--ink); transform: translateY(-2px); }
+@media (max-width: 900px) {
+  .footer-inner { grid-template-columns: 1fr 1fr; }
+  footer { padding: 60px 20px 30px; }
+}
+@media (max-width: 520px) {
+  .footer-inner { grid-template-columns: 1fr; }
+  .footer-brand { font-size: 36px; }
+}
+
+/* ===================== SCROLL HINT ===================== */
+.scroll-hint {
+  position: absolute;
+  bottom: 30px;
+  left: 32px;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(246, 239, 224, 0.5);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.scroll-hint::after {
+  content: "";
+  width: 60px; height: 1px;
+  background: rgba(246, 239, 224, 0.5);
+  animation: scrollLine 2s ease-in-out infinite;
+}
+@keyframes scrollLine {
+  0% { transform: scaleX(0); transform-origin: left; }
+  50% { transform: scaleX(1); transform-origin: left; }
+  100% { transform: scaleX(0); transform-origin: right; }
+}
+@media (max-width: 880px) { .scroll-hint { display: none; } }
+
+/* ===================== MOCKUP RIBBON ===================== */
+.mockup-ribbon {
+  position: fixed;
+  top: 20px;
+  right: -60px;
+  background: var(--accent-2);
+  color: var(--ink);
+  padding: 6px 80px;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  transform: rotate(40deg);
+  z-index: 100;
+  box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<div class="mockup-ribbon">Design-Mockup</div>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="brand">
+    <span class="dot"></span>
+    Forum<span style="color:var(--accent)">.</span>
+  </div>
+  <ul>
+    <li><a href="#events">Veranstaltungen</a></li>
+    <li><a href="#freitags">Freitags</a></li>
+    <li><a href="#verein">Verein</a></li>
+    <li><a href="#mitmachen">Mitmachen</a></li>
+    <li><a href="#anfahrt">Anfahrt</a></li>
+  </ul>
+  <a href="#newsletter" class="cta">Tickets</a>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="hero-grid">
+    <div>
+      <span class="hero-tag">Alte Güterabfertigung · Neustadt in Holstein</span>
+      <h1>
+        Kultur,<br>
+        <span class="red">die</span> <em>bewegt.</em><br>
+        <span class="stroke">Seit</span> <span class="yellow">1985.</span>
+      </h1>
+      <p class="lead">
+        Konzerte, Theater, Lesungen, Tanz, Workshops, Flohmärkte —
+        ehrenamtlich gemacht, mit Herz und Hall in einer alten Güterabfertigung.
+        Komm vorbei, mach mit, sei dabei.
+      </p>
+      <div class="hero-cta">
+        <a href="#events" class="btn btn-primary">Nächste Termine →</a>
+        <a href="#mitmachen" class="btn btn-ghost">Mitmachen</a>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="hero-sticker">
+        40<br>Jahre<br>Forum
+      </div>
+      <div class="hero-badge">Live · Laut · Ehrenamtlich</div>
+    </div>
+  </div>
+  <div class="scroll-hint">Scroll</div>
+</header>
+
+<!-- MARQUEE -->
+<div class="marquee">
+  <div class="marquee-track">
+    <span>Konzerte <span class="star"></span> Theater <span class="star"></span> Lesungen <span class="star"></span> Tanz <span class="star"></span> Workshops <span class="star"></span> Kindertheater <span class="star"></span> Flohmärkte <span class="star"></span> Poetry Slam <span class="star"></span></span>
+    <span>Konzerte <span class="star"></span> Theater <span class="star"></span> Lesungen <span class="star"></span> Tanz <span class="star"></span> Workshops <span class="star"></span> Kindertheater <span class="star"></span> Flohmärkte <span class="star"></span> Poetry Slam <span class="star"></span></span>
+  </div>
+</div>
+
+<!-- EVENTS -->
+<section id="events">
+  <div class="section-head">
+    <div>
+      <p class="section-eyebrow">Kommende Termine</p>
+      <h2 class="section-title">Was demnächst läuft.</h2>
+    </div>
+    <a href="#" class="btn btn-ghost">Alle Termine →</a>
+  </div>
+
+  <div class="events">
+    <a href="#" class="event-card">
+      <div class="event-image" style="background-image: url('https://images.unsplash.com/photo-1572116469696-31de0f17cc34?w=800&q=80');">
+        <div class="event-date-badge"><span class="day">29</span><span class="month">Mai</span></div>
+        <span class="event-cat">Sonstige</span>
+      </div>
+      <div class="event-body">
+        <h3 class="event-title">Kneipenquiz im Forum</h3>
+        <div class="event-meta"><span class="time">Fr · 19:30 Uhr</span><span class="price">3 €</span></div>
+      </div>
+      <span class="event-arrow">↗</span>
+    </a>
+
+    <a href="#" class="event-card">
+      <div class="event-image" style="background-image: url('https://images.unsplash.com/photo-1493676304819-0d7a8d026dcf?w=800&q=80');">
+        <div class="event-date-badge"><span class="day">30</span><span class="month">Mai</span></div>
+        <span class="event-cat">Party</span>
+      </div>
+      <div class="event-body">
+        <h3 class="event-title">Summer Warm-Up Party</h3>
+        <div class="event-meta"><span class="time">Sa · 20:00 Uhr</span><span class="price">5 €</span></div>
+      </div>
+      <span class="event-arrow">↗</span>
+    </a>
+
+    <a href="#" class="event-card">
+      <div class="event-image" style="background-image: url('https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=800&q=80');">
+        <div class="event-date-badge"><span class="day">12</span><span class="month">Juni</span></div>
+        <span class="event-cat">Sonstige</span>
+      </div>
+      <div class="event-body">
+        <h3 class="event-title">Offener Spieleabend</h3>
+        <div class="event-meta"><span class="time">Fr · 19:00 Uhr</span><span class="price">Spende</span></div>
+      </div>
+      <span class="event-arrow">↗</span>
+    </a>
+
+    <a href="#" class="event-card">
+      <div class="event-image" style="background-image: url('https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=800&q=80');">
+        <div class="event-date-badge"><span class="day">19</span><span class="month">Juni</span></div>
+        <span class="event-cat">Konzert</span>
+      </div>
+      <div class="event-body">
+        <h3 class="event-title">Humming Bee</h3>
+        <div class="event-meta"><span class="time">Fr · 20:00 Uhr</span><span class="price">15 €</span></div>
+      </div>
+      <span class="event-arrow">↗</span>
+    </a>
+
+    <a href="#" class="event-card">
+      <div class="event-image" style="background-image: url('https://images.unsplash.com/photo-1505236858219-8359eb29e329?w=800&q=80');">
+        <div class="event-date-badge"><span class="day">12</span><span class="month">Sept</span></div>
+        <span class="event-cat">Poetry Slam</span>
+      </div>
+      <div class="event-body">
+        <h3 class="event-title">Schienen Slam — Poetry-Slam</h3>
+        <div class="event-meta"><span class="time">Sa · 20:00 Uhr</span><span class="price">13 €</span></div>
+      </div>
+      <span class="event-arrow">↗</span>
+    </a>
+
+    <a href="#" class="event-card">
+      <div class="event-image" style="background-image: url('https://images.unsplash.com/photo-1574155376612-bfa4ed8aabfd?w=800&q=80');">
+        <div class="event-date-badge"><span class="day">14</span><span class="month">Nov</span></div>
+        <span class="event-cat">Konzert</span>
+      </div>
+      <div class="event-body">
+        <h3 class="event-title">Punkrock Meuterei 2026</h3>
+        <div class="event-meta"><span class="time">Sa · 18:45 Uhr</span><span class="price">25 €</span></div>
+      </div>
+      <span class="event-arrow">↗</span>
+    </a>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section id="verein" class="about">
+  <div class="about-inner">
+    <div>
+      <p class="section-eyebrow">Der Verein</p>
+      <h2>Hier wird Kultur <span class="highlight">selbst gemacht</span>.</h2>
+      <p>
+        Die Kulturwerkstatt Forum e.V. ist ein eingetragener Verein in freier Trägerschaft.
+        Hervorgegangen aus der Friedens- und Umweltarbeit wurde er 1985 gegründet —
+        und wird seitdem rein ehrenamtlich geführt und betrieben.
+      </p>
+      <p>
+        Unser Anliegen: allen Menschen die Möglichkeit zu bieten, selbst aktiv und kreativ
+        zu werden. In der alten Güterabfertigung von Neustadt schaffen wir den Rahmen, in
+        dem sich kulturelle Ideen entfalten können — von Konzerten und Theater über Lesungen
+        und Tanz bis zum „Kindertheater des Monats", das wir seit über 30 Jahren ausrichten.
+      </p>
+      <div class="stats">
+        <div><span class="num">40+</span><span class="label">Jahre Verein</span></div>
+        <div><span class="num">100%</span><span class="label">Ehrenamtlich</span></div>
+        <div><span class="num">30+</span><span class="label">Jahre Kindertheater</span></div>
+      </div>
+    </div>
+    <div class="about-image"></div>
+  </div>
+</section>
+
+<!-- FREITAGS -->
+<section id="freitags">
+  <div class="section-head">
+    <div>
+      <p class="section-eyebrow">Freitags im Forum</p>
+      <h2 class="section-title">Wiederkehrend, geliebt, immer voll.</h2>
+    </div>
+  </div>
+  <div class="freitags-grid">
+    <div class="freitag-card">
+      <div class="icon">?</div>
+      <h3>Kneipenquiz</h3>
+      <p>Wissen, Witz und kleine Preise. Komm allein oder im Team — Hauptsache mitmachen.</p>
+      <span class="when">Jeden letzten Freitag</span>
+    </div>
+    <div class="freitag-card">
+      <div class="icon">♟</div>
+      <h3>Spieleabend</h3>
+      <p>Brett- und Kartenspiele für alle. Bring deine Lieblinge mit oder probier was Neues.</p>
+      <span class="when">Jeden zweiten Freitag</span>
+    </div>
+    <div class="freitag-card">
+      <div class="icon">♪</div>
+      <h3>Singing Pub</h3>
+      <p>Mitsingen, Anstimmen, Mitgrölen — der Liederabend für alle Stimmlagen.</p>
+      <span class="when">Quartalsweise</span>
+    </div>
+    <div class="freitag-card">
+      <div class="icon">✦</div>
+      <h3>Tanzpartys</h3>
+      <p>Frauentag, Oller Kotten Revival, Tanz in den Mai — unsere legendären Mottoabende.</p>
+      <span class="when">Unregelmäßig</span>
+    </div>
+  </div>
+</section>
+
+<!-- MITMACHEN -->
+<section id="mitmachen" class="mitmachen-section">
+  <div class="mitmachen-inner">
+    <p class="section-eyebrow" style="color: var(--ink);">Ehrenamt</p>
+    <h2>Wir brauchen <span class="underline">dich.</span></h2>
+    <p>
+      Jede Veranstaltung, jede Baumaßnahme, jedes Projekt lebt vom Engagement
+      ehrenamtlicher Helferinnen und Helfer. Das macht uns einzigartig — und
+      genau deshalb suchen wir Unterstützung. Bestimmt ist etwas für dich dabei.
+    </p>
+    <a href="#" class="btn" style="background: var(--ink); color: var(--cream);">Schreib uns →</a>
+
+    <div class="mitmachen-roles">
+      <div class="role">Am Tresen <span class="num">01</span></div>
+      <div class="role">Beim Einlass <span class="num">02</span></div>
+      <div class="role">Ton &amp; Licht <span class="num">03</span></div>
+      <div class="role">Auf- &amp; Abbau <span class="num">04</span></div>
+      <div class="role">Instandhaltung <span class="num">05</span></div>
+      <div class="role">Foto &amp; Web <span class="num">06</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ANFAHRT -->
+<section id="anfahrt">
+  <div class="location">
+    <div class="location-info">
+      <p class="section-eyebrow">Hier findest du uns</p>
+      <h2>Alte <span class="accent">Güter-</span>abfertigung.</h2>
+      <p class="address">Wieksbergstraße 2–4<br>23730 Neustadt in Holstein</p>
+      <p>Direkt am Bahnhof Neustadt — einmal um die Schienen herum und ihr seid da. Mit dem Auto erreichbar über die A1 (Ausfahrt 14).</p>
+      <div class="modes">
+        <div class="mode">
+          <h4>🚆 Bahn</h4>
+          <p>RB85 von Lübeck nach Neustadt — Bahnhof Neustadt direkt nebenan.</p>
+        </div>
+        <div class="mode">
+          <h4>🚗 Auto</h4>
+          <p>A1 Ausfahrt 14, Richtung Neustadt. Parken an der Straße oder im Parkhaus am Bahnhof.</p>
+        </div>
+      </div>
+    </div>
+    <div class="location-map">
+      <iframe loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=10.812%2C54.103%2C10.824%2C54.111&layer=mapnik&marker=54.1074%2C10.8186" title="Lage Kulturwerkstatt Forum"></iframe>
+      <div class="pin">Forum</div>
+    </div>
+  </div>
+</section>
+
+<!-- NEWSLETTER -->
+<section id="newsletter" class="newsletter">
+  <div class="newsletter-inner">
+    <p class="section-eyebrow" style="color: var(--ink);">Bleib im Loop</p>
+    <h2>Nichts verpassen.</h2>
+    <p>Trag dich für unseren Newsletter ein und erfahre als Erste:r von neuen Konzerten, Theaterabenden, Workshops und Aktionen.</p>
+    <form class="newsletter-form" onsubmit="event.preventDefault(); alert('Mockup — hier kommt später Brevo rein.')">
+      <input type="email" placeholder="deine@e-mail.de" required>
+      <button type="submit">Eintragen</button>
+    </form>
+    <small>Double-Opt-In via Brevo. Abmeldung jederzeit möglich.</small>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div>
+      <div class="footer-brand">Kultur-<br>werk-<br>statt<span class="accent">.</span></div>
+      <p>Kulturwerkstatt Forum e.V. — ehrenamtlich seit 1985 in der alten Güterabfertigung Neustadt in Holstein.</p>
+    </div>
+    <div>
+      <h4>Programm</h4>
+      <ul>
+        <li><a href="#">Veranstaltungen</a></li>
+        <li><a href="#">Freitags im Forum</a></li>
+        <li><a href="#">Kindertheater</a></li>
+        <li><a href="#">Rückblick</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Verein</h4>
+      <ul>
+        <li><a href="#">Über uns</a></li>
+        <li><a href="#">Mitmachen</a></li>
+        <li><a href="#">Mitglied werden</a></li>
+        <li><a href="#">Partner &amp; Förderer</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Kontakt</h4>
+      <ul>
+        <li>Wieksbergstr. 2–4<br>23730 Neustadt</li>
+        <li><a href="tel:015732408145">0157 / 32 40 81 45</a></li>
+        <li><a href="mailto:vorstand@kulturwerkstatt-forum.de">vorstand@kulturwerkstatt-forum.de</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div>© Kulturwerkstatt Forum e.V. von 1985 · <a href="#" style="text-decoration:underline;">Impressum</a> · <a href="#" style="text-decoration:underline;">Datenschutz</a></div>
+    <div class="socials">
+      <a href="https://www.instagram.com/kulturwerkstatt_forum/" class="social-icon" aria-label="Instagram">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.8" fill="currentColor" stroke="none"/></svg>
+      </a>
+      <a href="https://www.facebook.com/forumneustadt" class="social-icon" aria-label="Facebook">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M13 22V12h3l1-4h-4V6c0-1 .5-2 2-2h2V0h-3c-3 0-5 2-5 5v3H6v4h3v10h4z"/></svg>
+      </a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

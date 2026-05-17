@@ -1,0 +1,78 @@
+---
+const year = new Date().getFullYear();
+---
+
+<footer class="bg-bg border-t border-line pt-20 px-8 pb-10">
+  <div class="max-w-[1400px] mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr] gap-10">
+    <div>
+      <div class="font-display text-[48px] leading-[0.9] uppercase tracking-tight">
+        Kultur-<br>werk-<br>statt<span class="text-accent">.</span>
+      </div>
+      <p class="text-cream/60 mt-4 max-w-[320px] text-[14px]">
+        Kulturwerkstatt Forum e.V. — ehrenamtlich seit 1985 in der alten Güterabfertigung
+        Neustadt in Holstein.
+      </p>
+    </div>
+
+    <div>
+      <h4 class="m-0 mb-4 font-display text-[13px] uppercase tracking-widest text-accent-2">Programm</h4>
+      <ul class="list-none p-0 m-0 flex flex-col gap-2 text-[14px]">
+        <li><a href="/veranstaltungen" class="opacity-70 hover:opacity-100 hover:text-accent transition-[opacity,color]">Veranstaltungen</a></li>
+        <li><a href="/freitags"        class="opacity-70 hover:opacity-100 hover:text-accent transition-[opacity,color]">Freitags im Forum</a></li>
+        <li><a href="/kindertheater"   class="opacity-70 hover:opacity-100 hover:text-accent transition-[opacity,color]">Kindertheater</a></li>
+        <li><a href="/rueckblick"      class="opacity-70 hover:opacity-100 hover:text-accent transition-[opacity,color]">Rückblick</a></li>
+      </ul>
+    </div>
+
+    <div>
+      <h4 class="m-0 mb-4 font-display text-[13px] uppercase tracking-widest text-accent-2">Verein</h4>
+      <ul class="list-none p-0 m-0 flex flex-col gap-2 text-[14px]">
+        <li><a href="/verein"     class="opacity-70 hover:opacity-100 hover:text-accent transition-[opacity,color]">Über uns</a></li>
+        <li><a href="/mitmachen"  class="opacity-70 hover:opacity-100 hover:text-accent transition-[opacity,color]">Mitmachen</a></li>
+        <li><a href="/mitmachen#mitglied" class="opacity-70 hover:opacity-100 hover:text-accent transition-[opacity,color]">Mitglied werden</a></li>
+        <li><a href="/partner"    class="opacity-70 hover:opacity-100 hover:text-accent transition-[opacity,color]">Partner &amp; Förderer</a></li>
+      </ul>
+    </div>
+
+    <div>
+      <h4 class="m-0 mb-4 font-display text-[13px] uppercase tracking-widest text-accent-2">Kontakt</h4>
+      <ul class="list-none p-0 m-0 flex flex-col gap-2 text-[14px]">
+        <li class="opacity-70">Wieksbergstr. 2–4<br />23730 Neustadt</li>
+        <li><a href="tel:+4915732408145" class="opacity-70 hover:opacity-100 hover:text-accent transition-[opacity,color]">0157 / 32 40 81 45</a></li>
+        <li><a href="mailto:vorstand@kulturwerkstatt-forum.de" class="opacity-70 hover:opacity-100 hover:text-accent transition-[opacity,color] break-all">vorstand@kulturwerkstatt-forum.de</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="max-w-[1400px] mx-auto mt-14 pt-7 border-t border-line flex flex-wrap items-center justify-between gap-4 text-[13px] text-cream/50">
+    <div>
+      © {year < 2026 ? 2026 : year} Kulturwerkstatt Forum e.V. von 1985 ·
+      <a href="/impressum"   class="underline hover:text-accent">Impressum</a> ·
+      <a href="/datenschutz" class="underline hover:text-accent">Datenschutz</a>
+    </div>
+    <div class="flex gap-3">
+      <a
+        href="https://www.instagram.com/kulturwerkstatt_forum/"
+        target="_blank" rel="noopener noreferrer"
+        aria-label="Instagram"
+        class="w-10 h-10 rounded-full bg-bg-2 border border-line flex items-center justify-center text-cream transition-[background,transform,color] duration-200 hover:bg-accent hover:text-ink hover:-translate-y-0.5"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="5" />
+          <circle cx="12" cy="12" r="4" />
+          <circle cx="17.5" cy="6.5" r="0.8" fill="currentColor" stroke="none" />
+        </svg>
+      </a>
+      <a
+        href="https://www.facebook.com/forumneustadt"
+        target="_blank" rel="noopener noreferrer"
+        aria-label="Facebook"
+        class="w-10 h-10 rounded-full bg-bg-2 border border-line flex items-center justify-center text-cream transition-[background,transform,color] duration-200 hover:bg-accent hover:text-ink hover:-translate-y-0.5"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M13 22V12h3l1-4h-4V6c0-1 .5-2 2-2h2V0h-3c-3 0-5 2-5 5v3H6v4h3v10h4z" />
+        </svg>
+      </a>
+    </div>
+  </div>
+</footer>

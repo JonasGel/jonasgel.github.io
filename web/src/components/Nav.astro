@@ -1,0 +1,44 @@
+---
+interface NavItem {
+  label: string;
+  href: string;
+}
+
+const items: NavItem[] = [
+  { label: "Veranstaltungen", href: "/#events" },
+  { label: "Freitags",        href: "/#freitags" },
+  { label: "Verein",          href: "/#verein" },
+  { label: "Mitmachen",       href: "/#mitmachen" },
+  { label: "Anfahrt",         href: "/#anfahrt" },
+];
+---
+
+<nav
+  class="sticky top-0 z-50 flex items-center justify-between px-8 py-[18px] backdrop-blur-md border-b border-line"
+  style="background: rgba(14, 13, 11, 0.85);"
+>
+  <a href="/" class="brand flex items-center gap-3 font-display text-[18px] uppercase tracking-wider">
+    <span class="dot inline-block w-3 h-3 bg-accent rotate-45 rounded-sm" aria-hidden="true"></span>
+    <span>Forum<span class="text-accent">.</span></span>
+  </a>
+
+  <ul class="hidden md:flex gap-7 list-none m-0 p-0 text-[14px] uppercase tracking-widest font-medium">
+    {items.map((it) => (
+      <li>
+        <a
+          href={it.href}
+          class="opacity-80 transition-[opacity,color] duration-200 hover:opacity-100 hover:text-accent-2"
+        >
+          {it.label}
+        </a>
+      </li>
+    ))}
+  </ul>
+
+  <a
+    href="/#events"
+    class="bg-accent text-ink px-[18px] py-[10px] font-display text-[13px] uppercase tracking-wider rounded-full transition-[transform,background] duration-200 hover:-translate-y-0.5 hover:bg-accent-2"
+  >
+    Tickets
+  </a>
+</nav>
